@@ -65,7 +65,7 @@ internal sealed class AnnotationCanvas : Control
         if (!Capture || gesture.Count == 0) return;
         var point = ToImage(e.Location);
         if (Tool is Tool.Line or Tool.Arrow && ModifierKeys.HasFlag(Keys.Shift)) point = Geometry.Snap(gesture[0],point);
-        if (Tool == Tool.Pen) gesture.Add(point);
+        if (Tool == Tool.Pen) { if (Geometry.Distance(gesture[^1],point) > .1f) gesture.Add(point); }
         else { if (gesture.Count > 1) gesture.RemoveAt(1); gesture.Add(point); }
         preview = new Mark(Tool,gesture.ToArray(),Ink.ToArgb(),Weight); Invalidate();
     }

@@ -14,9 +14,9 @@ internal static class SmokeTests
         if (!condition) throw new Exception(description);
         results.Add("PASS " + description);
     }
-    static void Mouse(AnnotationCanvas canvas, string name, Point location)
+    static void Mouse(Control canvas, string name, Point location)
     {
-        var method = typeof(AnnotationCanvas).GetMethod(name,BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var method = canvas.GetType().GetMethod(name,BindingFlags.Instance | BindingFlags.NonPublic)!;
         method.Invoke(canvas,[new MouseEventArgs(MouseButtons.Left,1,location.X,location.Y,0)]);
     }
     internal static int Run()
@@ -36,6 +36,21 @@ internal static class SmokeTests
                 var timeout = DateTime.UtcNow.AddSeconds(3);
                 while (!received && DateTime.UtcNow < timeout) { Application.DoEvents(); Thread.Sleep(10); }
                 Check(received,"Ctrl+Alt+A reaches WM_HOTKEY through Windows keyboard input");
+            }
+            using (var selector = new RegionSelector(desktop,SystemInformation.VirtualScreen))
+            {
+                using var selectTimer = new System.Windows.Forms.Timer { Interval = 100 };
+                selectTimer.Tick += (_,_) => {
+                    selectTimer.Stop();
+                    Mouse(selector,"OnMouseDown",new Point(220,180));
+                    Mouse(selector,"OnMouseMove",new Point(20,30));
+                    Mouse(selector,"OnMouseUp",new Point(20,30));
+                };
+                selectTimer.Start();
+                Check(selector.ShowDialog() == DialogResult.OK,"Region drag accepts selection and closes overlay");
+                Check(selector.Selection == new Rectangle(20,30,200,150),"Reverse region drag maps to source pixels");
+                using var cropped = desktop.Clone(selector.Selection,desktop.PixelFormat);
+                Check(cropped.Size == new Size(200,150),"Region capture keeps selected resolution");
             }
             var backdrop = new Bitmap(900,550);
             using (var g = Graphics.FromImage(backdrop))
@@ -64,6 +79,7 @@ internal static class SmokeTests
             using var output = canvas.Export();
             Check(!canvas.HasCaption && canvas.Document.Items.Count == 4,"Export flushes pending multiline caption");
             Check(canvas.Document.Items[^1].Text.Contains('\n'),"Caption preserves newlines");
+            Check(output.GetPixel(100,400).ToArgb() != backdrop.GetPixel(100,400).ToArgb(),"Single pen click renders a visible dot");
             Check(output.Width == 900 && output.Height == 550,"Export preserves source resolution");
             Check(output.GetPixel(300,200).ToArgb() != backdrop.GetPixel(300,200).ToArgb(),"Annotation pixels present in exported image");
             output.Save("artifacts/self-test/annotated.png",ImageFormat.Png);
