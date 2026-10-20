@@ -1,0 +1,73 @@
+name: Windows builds and tests
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+            label: AMD64
+          - rid: win-arm64
+            runner: windows-11-arm
+            label: ARM64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Core regression tests
+        run: dotnet run --project tests/Annotator.Tests -c Release
+      - name: Build portable app with bundled runtime
+        run: dotnet publish src/Annotator -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish -p:DebugType=None -p:DebugSymbols=false
+      - name: Native Windows integration tests
+        shell: pwsh
+        run: |
+          $process = Start-Process artifacts/publish/WinScreenshotAnnotator.exe -ArgumentList '--self-test' -PassThru -Wait
+          Get-Content artifacts/self-test/results.txt
+          if ($process.ExitCode -ne 0) { throw "Windows integration tests failed: $($process.ExitCode)" }
+      - name: Include instructions and checksums
+        shell: pwsh
+        run: |
+          Copy-Item README.md,LICENSE artifacts/publish/
+          Get-ChildItem artifacts/publish -File | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content artifacts/publish/SHA256SUMS.txt
+          Compress-Archive -Path artifacts/publish/* -DestinationPath artifacts/ScreenshotAnnotator-${{ matrix.label }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScreenshotAnnotator-${{ matrix.label }}
+          path: artifacts/ScreenshotAnnotator-${{ matrix.label }}.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-test-evidence-${{ matrix.label }}
+          path: artifacts/self-test/
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ScreenshotAnnotator-*
+          merge-multiple: true
+          path: release
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum release/*.zip > release/SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "Screenshot Annotator $GITHUB_REF_NAME" --notes "Portable native Windows app. Download ARM64 for Surface/Tabo or AMD64 for Intel/AMD. Extract the entire ZIP and run WinScreenshotAnnotator.exe. Ctrl+Alt+A captures a region; Ctrl+Alt+F captures the desktop. Runtime included. Unsigned binaries. See README for controls and installation."
