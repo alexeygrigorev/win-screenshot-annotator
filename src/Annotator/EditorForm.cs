@@ -18,6 +18,7 @@ internal sealed class EditorForm : Form
     TaskCompletionSource? painted;
     static Task<CoreWebView2Environment>? environment;
     bool allowClose;
+    byte[]? backdropBytes;
     public Task Ready => ready.Task;
     public long OpenLatencyMs { get; private set; }
     public Point ImageOrigin { get; private set; }
@@ -58,8 +59,8 @@ internal sealed class EditorForm : Form
             {
                 var name = new Uri(e.Request.Uri).AbsolutePath.TrimStart('/');
                 if (name == "") name = "index.html";
-                var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("Annotator.Web." + name);
-                var type = name.EndsWith(".js") ? "text/javascript" : name.EndsWith(".css") ? "text/css" : "text/html";
+                Stream? stream = name == "backdrop.bmp" && backdropBytes != null ? new MemoryStream(backdropBytes, false) : Assembly.GetExecutingAssembly().GetManifestResourceStream("Annotator.Web." + name);
+                var type = name.EndsWith(".bmp") ? "image/bmp" : name.EndsWith(".js") ? "text/javascript" : name.EndsWith(".css") ? "text/css" : "text/html";
                 e.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(stream ?? new MemoryStream(), stream == null ? 404 : 200, stream == null ? "Not Found" : "OK", $"Content-Type: {type}; charset=utf-8\r\nCache-Control: no-store");
             };
             web.CoreWebView2.WebMessageReceived += Receive;
@@ -116,8 +117,11 @@ internal sealed class EditorForm : Form
         Location = origin ?? new Point(work.X + (work.Width - Width) / 2, work.Y + (work.Height - Height) / 2);
         _ = Handle;
         web.ZoomFactor = 96d / DeviceDpi;
-        using var png = new MemoryStream();
-        image.Save(png, ImageFormat.Png);
+        // Lossless BMP crosses the in-process resource bridge without PNG
+        // compression or a multi-megabyte base64 script on the hotkey path.
+        using var bitmap = new MemoryStream();
+        image.Save(bitmap, ImageFormat.Bmp);
+        backdropBytes = bitmap.ToArray();
         var below = origin.HasValue && origin.Value.Y - work.Y < 91;
         var windowX = origin.HasValue
             ? Math.Clamp(origin.Value.X - 21, work.Left - 21, Math.Max(work.Left - 21, work.Right - Width + 21))
@@ -125,14 +129,14 @@ internal sealed class EditorForm : Form
         var offsetX = origin.HasValue ? Math.Max(0, origin.Value.X - windowX - 21) : 0;
         await Script($"document.body.classList.toggle('chrome-below', {below.ToString().ToLowerInvariant()}); document.documentElement.style.setProperty('--sheet-offset-x','{offsetX}px')");
         loaded = new();
-        var payload = JsonSerializer.Serialize(new { url = "data:image/png;base64," + Convert.ToBase64String(png.ToArray()), width = image.Width, height = image.Height });
+        var payload = JsonSerializer.Serialize(new { url = "https://annotator.local/backdrop.bmp", width = image.Width, height = image.Height });
         await Script($"window.annotator.load({payload},{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         var metrics = await loaded.Task.WaitAsync(TimeSpan.FromSeconds(15));
         var sheet = metrics.GetProperty("sheet");
         var dpr = metrics.GetProperty("dpr").GetDouble();
         var offset = new Point((int)Math.Round(sheet.GetProperty("x").GetDouble() * dpr), (int)Math.Round(sheet.GetProperty("y").GetDouble() * dpr));
         if (origin.HasValue) Location = new Point(origin.Value.X - offset.X, origin.Value.Y - offset.Y);
-        ImageOrigin = new Point(Location.X + offset.X, Location.Y + offset.Y);
+        ImageOrigin = web.PointToScreen(offset);
         DisplaySize = new Size((int)Math.Round(sheet.GetProperty("width").GetDouble() * dpr), (int)Math.Round(sheet.GetProperty("height").GetDouble() * dpr));
         IsPrepared = true;
         Show(); Activate(); web.Focus();
