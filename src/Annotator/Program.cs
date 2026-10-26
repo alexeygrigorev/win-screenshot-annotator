@@ -139,9 +139,10 @@ internal sealed class CaptureContext : ApplicationContext
         try { using var image = Image.FromFile(dialog.FileName); Open(new Bitmap(image)); }
         catch (Exception ex) { Error(ex); }
     }
-    void Open(Bitmap image)
+    void Open(Bitmap image, Point? selectionScreenOrigin = null)
     {
-        var editor = new EditorForm(image) { Icon = AppIcon.Large };
+        EditorForm.MarkOpenStart();
+        var editor = new EditorForm(image, selectionScreenOrigin) { Icon = AppIcon.Large };
         editors.Add(editor);
         editor.FormClosed += (_,_) => editors.Remove(editor);
         editor.Show(); editor.Activate();
@@ -157,14 +158,23 @@ internal sealed class CaptureContext : ApplicationContext
             await Task.Delay(180); // Let DWM remove our windows before copying desktop pixels.
             using var desktop = ScreenCapture.Desktop();
             Bitmap? selected = null;
+            Point? selectionOrigin = null;
             if (region)
             {
                 using var selector = new RegionSelector(desktop, SystemInformation.VirtualScreen);
-                if (selector.ShowDialog() == DialogResult.OK) selected = desktop.Clone(selector.Selection, desktop.PixelFormat);
+                if (selector.ShowDialog() == DialogResult.OK)
+                {
+                    selected = desktop.Clone(selector.Selection, desktop.PixelFormat);
+                    // Bitmap coords start at (0,0); the screen origin restores
+                    // the virtual-desktop offset (negative on left/top monitors).
+                    selectionOrigin = new Point(
+                        SystemInformation.VirtualScreen.X + selector.Selection.X,
+                        SystemInformation.VirtualScreen.Y + selector.Selection.Y);
+                }
             }
             else selected = new Bitmap(desktop);
             foreach (var editor in visible) editor.Show();
-            if (selected != null) Open(selected);
+            if (selected != null) Open(selected, selectionOrigin);
         }
         catch (Exception ex) { foreach (var editor in visible) editor.Show(); Error(ex); }
         finally { capturing = false; }
