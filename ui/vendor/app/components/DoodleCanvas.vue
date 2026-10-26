@@ -514,7 +514,7 @@ function requestClose(): void {
 }
 
 /** The parent owns the overlay chrome, so it needs the same door. */
-defineExpose({ requestClose, commit, commitText, repaint, items, tool, pen, width, editing, undo, clear });
+defineExpose({ requestClose, commit, commitText, repaint, items, tool, pen, width, editing, undo, clear, loadBackdrop });
 
 function onKeydown(e: KeyboardEvent): void {
   // Ctrl/Cmd+Z only. Escape is the overlay's to handle, and it already does —

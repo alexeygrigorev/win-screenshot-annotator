@@ -21,7 +21,7 @@ for src, dest in files.items():
   raw = raw.replace('return Math.round(Math.max(strokeWidth * TEXT.sizeRatio, TEXT.minSize));', '// Alexey t1536u: preserve our 36px captions independently of stroke width.\n  return 36;')
  if dest.endswith('DoodleCanvas.vue'):
   raw = raw.replace('const MAX = 2048;', 'const MAX = Number.MAX_SAFE_INTEGER; // Keep original captured pixels.')
-  raw = raw.replace('defineExpose({ requestClose });', 'defineExpose({ requestClose, commit, commitText, repaint, items, tool, pen, width, editing, undo, clear });')
+  raw = raw.replace('defineExpose({ requestClose });', 'defineExpose({ requestClose, commit, commitText, repaint, items, tool, pen, width, editing, undo, clear, loadBackdrop });')
   raw = raw.replace('        {{ saving ? \'Saving…\' : \'Attach\' }}', '        {{ saving ? \'Saving…\' : \'Copy\' }}')
   raw = raw.replace('      <button class="btn primary"', '      <button class="btn" @click="emit(\'save\')">Save PNG</button>\n      <button class="btn primary"')
   raw = raw.replace('  close: [];', '  close: [];\n  save: [];')

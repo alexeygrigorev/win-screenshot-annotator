@@ -10,16 +10,10 @@ window.annotator = {
   async load(data, scale) {
     document.documentElement.style.setProperty('--sheet-width', `${data.width * scale}px`);
     document.documentElement.style.setProperty('--sheet-height', `${data.height * scale}px`);
-    source.value=data.url;
-    await nextTick();
+    // Await the component's real image-load promise. Polling with timers in a
+    // hidden WebView is throttled by Chromium and costs a full second.
+    await component.value.loadBackdrop(data.url);
     const c=document.querySelector('canvas');
-    for(let i=0;i<300;i++) {
-      if(c.width===data.width && c.height===data.height) break;
-      await new Promise(r=>setTimeout(r,10));
-    }
-    // Hidden prewarmed WebViews may suspend animation frames. Report layout
-    // after the image load and Vue update; the host measures paint after Show.
-    await new Promise(r=>setTimeout(r,0));
     bridge({kind:'loaded',sheet:rect(c),dpr:devicePixelRatio});
   },
   close: () => component.value.requestClose(),
