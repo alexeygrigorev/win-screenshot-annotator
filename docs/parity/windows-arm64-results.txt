@@ -1,0 +1,33 @@
+PASS Desktop capture uses physical pixels
+PASS Both global hotkeys register
+PASS Real keyboard input delivers Ctrl+Alt+A through WM_HOTKEY
+PASS Region selector accepts a reverse drag
+PASS Region coordinates remain physical pixels
+PASS Prewarmed editor has no visible window
+PASS PocketShell Inter Variable font is bundled and loaded before capture
+editor_open_warm_ms=91 dpi=96
+PASS Prewarmed capture-to-visible-editor is under 1 second
+PASS Image position equals selection origin in physical pixels
+PASS Image display equals selected 900x550 physical pixels
+PASS Toolbar has all six original icon tools
+PASS Default ink and weight match PocketShell
+PASS All six colour tokens match the reference in order
+PASS Weight controls change the active mark width
+PASS Caption uses Alexey's 36px font exception
+PASS Caption font weight is 600
+PASS Pointer and keyboard input commits the four reference annotations
+PASS Pen click paints a red dot at the same reference coordinate
+PASS Copy exports the original PNG dimensions to the Windows clipboard
+PASS Click existing caption reopens it
+PASS Ctrl+Z restores text edit
+PASS Clear empties the drawing
+PASS Undo restores Clear
+PASS Escape arms the discard guard
+PASS Second Escape keeps editing
+PASS Window close routes through the discard guard
+PASS Repeated window close never discards work
+PASS Top-right edge selection remains 1:1 at its original physical position
+PASS Toolbar attaches below a selection near the top edge
+PASS Settings writes the quoted EXE path to HKCU Run
+PASS Settings removes the HKCU Run entry
+Windows self-test passed: Arm64

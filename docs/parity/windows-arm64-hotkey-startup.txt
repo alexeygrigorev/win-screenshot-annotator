@@ -1,0 +1,9 @@
+tray_visible=True
+editor_ready=False
+editor_open_ms=340
+hotkey_region_registered=True
+hotkey_desktop_registered=True
+captures_started=1
+balloons_shown=1
+tray_icon_custom=True
+
