@@ -11,10 +11,18 @@ internal static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         if (args.Contains("--self-test")) return SmokeTests.Run();
+        // Single instance. A second launch never captures: it asks the running instance to show a tray balloon and exits.
+        const string activateName = @"Local\WinScreenshotAnnotator.Activate";
         using var mutex = new Mutex(true, @"Local\WinScreenshotAnnotator", out var first);
-        if (!first) { MessageBox.Show("Screenshot Annotator is already running. Use Ctrl+Alt+A or its tray icon."); return 0; }
+        if (!first)
+        {
+            if (EventWaitHandle.TryOpenExisting(activateName, out var running)) using (running) running.Set();
+            return 0;
+        }
+        using var activate = new EventWaitHandle(false, EventResetMode.AutoReset, activateName);
         Application.ThreadException += (_, e) => MessageBox.Show(e.Exception.Message, "Screenshot Annotator");
-        using var context = new CaptureContext(args.Contains("--tray"));
+        // Starts silently in the tray (the former --tray behavior, still accepted). --capture opts into capturing at launch.
+        using var context = new CaptureContext(args.Contains("--capture"), activate);
         Application.Run(context);
         return 0;
     }
@@ -47,9 +55,14 @@ internal sealed class CaptureContext : ApplicationContext
     readonly HotkeyWindow hotkeys = new();
     readonly NotifyIcon tray;
     readonly List<EditorForm> editors = [];
+    readonly Control ui = new();
+    readonly RegisteredWaitHandle activateWait;
+    readonly string? statusFile = Environment.GetEnvironmentVariable("WSA_STATUS_FILE");
+    int balloons, captures;
     bool capturing;
-    public CaptureContext(bool trayOnly)
+    public CaptureContext(bool captureAtStart, EventWaitHandle activate)
     {
+        _ = ui.Handle; // UI-thread marshaling target for the second-instance signal.
         var menu = new ContextMenuStrip();
         menu.Items.Add("Capture region   Ctrl+Alt+A", null, (_,_) => Capture(true));
         menu.Items.Add("Capture desktop   Ctrl+Alt+F", null, (_,_) => Capture(false));
@@ -64,12 +77,36 @@ internal sealed class CaptureContext : ApplicationContext
         hotkeys.CaptureRequested += Capture;
         if (!hotkeys.RegionRegistered || !hotkeys.DesktopRegistered)
             MessageBox.Show("A capture hotkey is already in use. Close the conflicting app and restart Screenshot Annotator. The tray capture commands still work.", "Hotkey conflict");
-        if (!trayOnly)
+        activateWait = ThreadPool.RegisterWaitForSingleObject(activate, (_,_) => ui.BeginInvoke((Action)AlreadyRunning), null, -1, false);
+        if (captureAtStart)
         {
             var timer = new System.Windows.Forms.Timer { Interval = 200 };
             timer.Tick += (_,_) => { timer.Stop(); timer.Dispose(); Capture(true); };
             timer.Start();
         }
+        WriteStatus();
+    }
+    void AlreadyRunning()
+    {
+        balloons++;
+        tray.ShowBalloonTip(4000, "Screenshot Annotator is already running", "Press Ctrl+Alt+A to capture a region, or use the tray icon.", ToolTipIcon.Info);
+        WriteStatus();
+    }
+    // Test hook for CI: state that cannot be observed reliably from outside the process.
+    void WriteStatus()
+    {
+        if (string.IsNullOrEmpty(statusFile)) return;
+        try
+        {
+            File.WriteAllLines(statusFile, new[] {
+                $"tray_visible={tray.Visible}",
+                $"hotkey_region_registered={hotkeys.RegionRegistered}",
+                $"hotkey_desktop_registered={hotkeys.DesktopRegistered}",
+                $"captures_started={captures}",
+                $"balloons_shown={balloons}",
+            });
+        }
+        catch (IOException) { }
     }
     void Error(Exception ex) => MessageBox.Show(ex.Message, "Screenshot Annotator", MessageBoxButtons.OK, MessageBoxIcon.Error);
     void OpenImage()
@@ -89,7 +126,7 @@ internal sealed class CaptureContext : ApplicationContext
     async void Capture(bool region)
     {
         if (capturing) return;
-        capturing = true;
+        capturing = true; captures++; WriteStatus();
         var visible = editors.Where(e => e.Visible).ToArray();
         try
         {
@@ -113,7 +150,7 @@ internal sealed class CaptureContext : ApplicationContext
     {
         // Close() asks about unsaved annotations. Keep the tray alive if any close is cancelled.
         foreach (var editor in editors.ToArray()) { editor.Close(); if (!editor.IsDisposed) return; }
-        tray.Visible = false; tray.Dispose(); hotkeys.Dispose(); base.ExitThreadCore();
+        activateWait.Unregister(null); tray.Visible = false; tray.Dispose(); hotkeys.Dispose(); ui.Dispose(); base.ExitThreadCore();
     }
 }
 

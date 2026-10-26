@@ -42,6 +42,42 @@ jobs:
           $process = Start-Process artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe -ArgumentList '--self-test' -PassThru -Wait
           Get-Content artifacts/self-test/results.txt
           if ($process.ExitCode -ne 0) { throw "Windows integration tests failed: $($process.ExitCode)" }
+      - name: Startup behavior check (no args -> tray only, hotkey registered, single instance)
+        shell: pwsh
+        run: |
+          Add-Type -Namespace W -Name U -MemberDefinition @'
+          [DllImport("user32.dll", SetLastError=true)] public static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
+          [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr h, int id);
+          '@
+          $exe = (Resolve-Path artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe).Path
+          $status = Join-Path $env:RUNNER_TEMP 'wsa-status.txt'
+          $env:WSA_STATUS_FILE = $status
+          $app = Start-Process $exe -PassThru
+          try {
+            Start-Sleep -Seconds 5
+            $app.Refresh()
+            if ($app.HasExited) { throw "App exited on no-args launch (code $($app.ExitCode))" }
+            $s = Get-Content $status -Raw; Write-Output $s
+            if ($app.MainWindowHandle -ne [IntPtr]::Zero) { throw "No-args launch opened a window: '$($app.MainWindowTitle)'" }
+            if ($s -notmatch 'captures_started=0') { throw 'No-args launch started a capture' }
+            if ($s -notmatch 'tray_visible=True') { throw 'Tray icon not visible' }
+            if ($s -notmatch 'hotkey_region_registered=True') { throw 'Ctrl+Alt+A not registered by the app' }
+            # Ctrl+Alt (0x0003) | MOD_NOREPEAT (0x4000) + 'A' must already be taken by the running app.
+            if ([W.U]::RegisterHotKey([IntPtr]::Zero, 9001, 0x4003, 0x41)) { [W.U]::UnregisterHotKey([IntPtr]::Zero, 9001) | Out-Null; throw 'Ctrl+Alt+A is free: app did not register it' }
+            Write-Output "External check: Ctrl+Alt+A is held by the app (error $([Runtime.InteropServices.Marshal]::GetLastWin32Error()))"
+            $second = Start-Process $exe -PassThru -Wait
+            if ($second.ExitCode -ne 0) { throw "Second launch exit code $($second.ExitCode)" }
+            Start-Sleep -Seconds 2
+            $app.Refresh()
+            if ($app.HasExited) { throw 'First instance died after second launch' }
+            $s = Get-Content $status -Raw; Write-Output $s
+            if ($s -notmatch 'balloons_shown=1') { throw 'Second launch did not show the already-running tray balloon' }
+            if ($s -notmatch 'captures_started=0') { throw 'Second launch started a capture' }
+            if ($app.MainWindowHandle -ne [IntPtr]::Zero) { throw 'Second launch opened a window' }
+            Write-Output 'Startup behavior check passed'
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+          }
       - name: Package EXE and ZIP (EXE + README only)
         shell: pwsh
         run: |
@@ -83,7 +119,7 @@ jobs:
             echo "- ARM64 (Surface / Snapdragon / Tabo): ScreenshotAnnotator-ARM64.exe"
             echo "- AMD64 (Intel / AMD): ScreenshotAnnotator-AMD64.exe"
             echo
-            echo "Double-click the EXE, then press Ctrl+Alt+A to capture a region (Ctrl+Alt+F: full desktop). The binaries are unsigned: if SmartScreen appears, click More info, then Run anyway. The ZIPs contain only the same EXE plus README."
+            echo "Double-click the EXE: it starts quietly in the tray (no window). Press Ctrl+Alt+A to capture a region (Ctrl+Alt+F: full desktop). The binaries are unsigned: if SmartScreen appears, click More info, then Run anyway. The ZIPs contain only the same EXE plus README."
             echo
             echo "SHA-256:"
             echo

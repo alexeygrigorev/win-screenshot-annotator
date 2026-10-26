@@ -3,8 +3,8 @@
 ## How to run
 
 1. Download `ScreenshotAnnotator-ARM64.exe` (ARM / Surface / Snapdragon) or `ScreenshotAnnotator-AMD64.exe` (Intel / AMD) from [Releases](https://github.com/alexeygrigorev/win-screenshot-annotator/releases/latest).
-2. Double-click it. It is unsigned, so if SmartScreen appears click **More info → Run anyway**.
-3. Press Ctrl+Alt+A to select a region and annotate it.
+2. Double-click it. It is unsigned, so if SmartScreen appears click **More info → Run anyway**. Nothing pops up: it starts quietly in the notification area (tray).
+3. Press Ctrl+Alt+A any time to select a region and annotate it. Launching it again just shows an "already running" tray message.
 
 Capture a region, draw on it immediately, then copy or save a PNG. The app uses C# / Windows Forms with GDI capture and a Win32 global hotkey, with no Electron or browser runtime. Windows is the supported platform.
 
@@ -15,13 +15,13 @@ Use the portable release for your Windows architecture:
 1. Open [Releases](https://github.com/alexeygrigorev/win-screenshot-annotator/releases/latest).
 2. Download ScreenshotAnnotator-ARM64.exe for ARM Windows (Tabo / Snapdragon Surface), or ScreenshotAnnotator-AMD64.exe for Intel/AMD Windows. Check Settings → System → About → System type if unsure.
 3. Optionally move the EXE somewhere permanent, such as `%LOCALAPPDATA%\ScreenshotAnnotator`. It is a single self-contained file; nothing else is needed.
-4. Run it. A region selector opens immediately. Drag over the screen and release to open the editor. Escape cancels capture. The app stays in the notification area after closing an editor.
+4. Run it. It starts silently in the notification area and waits for Ctrl+Alt+A. Drag over the screen and release to open the editor. Escape cancels capture. The app stays in the notification area after closing an editor. Only one copy runs; launching it again shows a tray balloon instead of capturing. Pass `--capture` to start a region capture immediately at launch.
 
 Requires Windows 11 (or Windows 10 22H2 with applicable .NET support). The .NET 10 runtime is included, so you don't need an SDK or installer. You don't need admin rights to run it.
 
 Release binaries are unsigned, so Windows may show a SmartScreen reputation prompt. Verify the downloaded EXE against the release's `SHA256SUMS.txt` with `Get-FileHash` before choosing to run it.
 
-To start the app when you sign in, press Win+R, enter `shell:startup`, and add a shortcut to the EXE with `--tray` in its target. `--tray` starts quietly without capturing. To uninstall, exit from the tray menu, then delete the EXE and startup shortcut.
+To start the app when you sign in, press Win+R, enter `shell:startup`, and add a shortcut to the EXE. It starts quietly in the tray without capturing (`--tray` is still accepted and does the same). To uninstall, exit from the tray menu, then delete the EXE and startup shortcut.
 
 ## Controls
 
