@@ -15,6 +15,7 @@ internal sealed class EditorForm : Form
     readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.FromArgb(22, 27, 34) };
     readonly TaskCompletionSource ready = new();
     TaskCompletionSource<JsonElement>? loaded;
+    TaskCompletionSource? painted;
     static Task<CoreWebView2Environment>? environment;
     bool allowClose;
     public Task Ready => ready.Task;
@@ -73,6 +74,7 @@ internal sealed class EditorForm : Form
         var root = data.RootElement;
         switch (root.GetProperty("kind").GetString())
         {
+            case "painted": painted?.TrySetResult(); break;
             case "ready": ready.TrySetResult(); break;
             case "loaded": loaded?.TrySetResult(root.Clone()); break;
             case "close": allowClose = true; Close(); break;
@@ -127,7 +129,9 @@ internal sealed class EditorForm : Form
         DisplaySize = new Size((int)Math.Round(sheet.GetProperty("width").GetDouble() * dpr), (int)Math.Round(sheet.GetProperty("height").GetDouble() * dpr));
         IsPrepared = true;
         Show(); Activate(); web.Focus();
-        await Script("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+        painted = new();
+        await Script("requestAnimationFrame(()=>requestAnimationFrame(()=>window.chrome.webview.postMessage({kind:'painted'})))");
+        await painted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         OpenLatencyMs = timer.ElapsedMilliseconds;
     }
 

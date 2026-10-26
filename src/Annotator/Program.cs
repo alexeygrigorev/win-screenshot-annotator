@@ -101,6 +101,8 @@ internal sealed class CaptureContext : ApplicationContext
             timer.Tick += (_,_) => { timer.Stop(); timer.Dispose(); Capture(true); };
             timer.Start();
         }
+        warmEditor = new EditorForm();
+        _ = ReportWarmAsync(warmEditor);
         WriteStatus();
     }
     SettingsForm? settings;
@@ -157,7 +159,7 @@ internal sealed class CaptureContext : ApplicationContext
         editor.FormClosed += (_,_) => editors.Remove(editor);
         try { using (image) await editor.ShowImageAsync(image, selectionScreenOrigin, timer); lastEditorLatency = editor.OpenLatencyMs; WriteStatus(); }
         catch (Exception ex) { editor.CloseForTest(); Error(ex); }
-        if (warmEditor == null) warmEditor = new EditorForm();
+        if (warmEditor == null) { warmEditor = new EditorForm(); _ = ReportWarmAsync(warmEditor); }
     }
     async void Capture(bool region)
     {

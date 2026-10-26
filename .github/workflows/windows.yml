@@ -28,7 +28,7 @@ jobs:
           dotnet-version: '10.0.x'
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - name: Verify embedded UI matches its vendored source
@@ -106,6 +106,7 @@ jobs:
           Add-Type -Namespace W -Name U -MemberDefinition @'
           [DllImport("user32.dll", SetLastError=true)] public static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
           [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr h, int id);
+          [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
           '@
           $exe = (Resolve-Path artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe).Path
           $status = Join-Path $env:RUNNER_TEMP 'wsa-status.txt'
@@ -134,6 +135,17 @@ jobs:
             if ($s -notmatch 'captures_started=0') { throw 'Second launch started a capture' }
             if ($app.MainWindowHandle -ne [IntPtr]::Zero) { throw 'Second launch opened a window' }
             Write-Output 'Startup behavior check passed'
+            # Measure the real hotkey handler -> desktop capture -> visible, painted editor.
+            for ($i=0; $i -lt 100 -and (Get-Content $status -Raw) -notmatch 'editor_ready=True'; $i++) { Start-Sleep -Milliseconds 100 }
+            if ((Get-Content $status -Raw) -notmatch 'editor_ready=True') { throw 'Tray failed to prewarm its editor' }
+            [W.U]::keybd_event(0x11,0,0,[UIntPtr]::Zero); [W.U]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [W.U]::keybd_event(0x46,0,0,[UIntPtr]::Zero)
+            [W.U]::keybd_event(0x46,0,2,[UIntPtr]::Zero); [W.U]::keybd_event(0x12,0,2,[UIntPtr]::Zero); [W.U]::keybd_event(0x11,0,2,[UIntPtr]::Zero)
+            for ($i=0; $i -lt 100 -and (Get-Content $status -Raw) -notmatch 'editor_open_ms=\d+'; $i++) { Start-Sleep -Milliseconds 100 }
+            $s = Get-Content $status -Raw
+            $s | Set-Content artifacts/self-test/hotkey-startup.txt
+            if ($s -notmatch 'editor_open_ms=(\d+)') { throw 'Hotkey did not open an editor' }
+            if ([int]$Matches[1] -ge 1000) { throw "Hotkey to editor took $($Matches[1]) ms (limit <1000 ms)" }
+            Write-Output "Real hotkey-to-painted-editor: $($Matches[1]) ms"
           } finally {
             if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
           }
