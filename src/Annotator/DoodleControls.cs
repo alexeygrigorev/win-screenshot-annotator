@@ -39,6 +39,7 @@ internal abstract class DoodleToolButton : Control
 {
     bool hover;
     bool active;
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool Active
     {
         get => active;
@@ -116,6 +117,7 @@ internal static class GraphicsRound
 // circle, type, rotate-ccw, trash-2).
 internal sealed class IconButton : DoodleToolButton
 {
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public string IconName { get; set; } = "";
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -130,6 +132,7 @@ internal sealed class IconButton : DoodleToolButton
 // 24px button with a 14px round colour chip; the selected pen shows a ring.
 internal sealed class SwatchButton : DoodleToolButton
 {
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color PenColor { get; set; } = Color.Red;
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -152,6 +155,7 @@ internal sealed class SwatchButton : DoodleToolButton
 // button is 24px — ordering survives the cap).
 internal sealed class WeightButton : DoodleToolButton
 {
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public float Weight { get; set; } = 12;
     // --dot: min(round(w / 1.5) + 2, 16)
     public static float DotFor(float w) => Math.Min(MathF.Round(w / 1.5f) + 2, 16);
@@ -184,6 +188,7 @@ internal sealed class ToolbarSeparator : Control
 internal sealed class DoodleButton : Button
 {
     public enum Kind { Default, Primary, Danger }
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Kind ButtonKind { get; set; } = Kind.Default;
     public DoodleButton()
     {

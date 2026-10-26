@@ -14,7 +14,7 @@ using Annotator.Core;
 
 namespace Annotator;
 
-internal sealed class AnnotationCanvas : Control
+internal sealed class AnnotationCanvas : ScrollableControl
 {
     public Bitmap Backdrop { get; }
     public Document Document { get; } = new();
@@ -174,7 +174,7 @@ internal sealed class AnnotationCanvas : Control
         using var face = Painter.TextFont(editingMark);
         var previous = caption.Font;
         caption.Font = new Font(face.FontFamily, face.Size * ViewScale, FontStyle.Bold, GraphicsUnit.Pixel);
-        previous.Dispose();
+        // The inherited control font belongs to WinForms.
     }
 
     void AutoSizeCaption()

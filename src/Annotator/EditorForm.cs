@@ -7,6 +7,7 @@
 // Deliberately NOT ported: Redo (undo-only history), letter tool shortcuts
 // (P/L/A/R/E/T), PocketShell's 56vh fit (1:1 over the selection instead).
 using System.Diagnostics;
+using Annotator.Core;
 using System.Drawing.Imaging;
 
 namespace Annotator;
@@ -158,8 +159,6 @@ internal sealed class EditorForm : Form
         clear = new IconButton { IconName = "trash-2", AccessibleName = "Clear" };
         clear.Click += (_, _) => { Canvas.CommitCaption(); Canvas.Document.Clear(); Canvas.Invalidate(); RefreshChrome(); };
         tips.SetToolTip(clear, "Clear");
-        undoButton = undo;
-        clearButton = clear;
         right.Controls.Add(undo);
         right.Controls.Add(clear);
 
@@ -337,7 +336,7 @@ internal sealed class EditorForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         Canvas.CommitCaption();
-        if (Canvas.Document.IsDirty && !guardArmed)
+        if (Canvas.Document.IsDirty)
         {
             // Escape never destroys work: arm the guard instead of closing.
             e.Cancel = true;
@@ -354,7 +353,7 @@ internal sealed class EditorForm : Form
             // While typing, the textbox owns undo/copy; only the commit keys
             // and the app's Save extra are handled here.
             if (keyData is Keys.Escape or (Keys.Control | Keys.Enter)) { Canvas.CommitCaption(); Canvas.Focus(); RefreshChrome(); return true; }
-            if (keyData is Keys.Control | Keys.S) { Save(); return true; }
+            if (keyData == (Keys.Control | Keys.S)) { Save(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
         }
         switch (keyData)

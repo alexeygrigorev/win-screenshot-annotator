@@ -104,7 +104,7 @@ public static class Geometry
         return true;
     }
 
-    public static float TextSize(float weight) => MathF.Round(Math.Max(weight * TextSizeRatio, TextMinSize));
+    public static float TextSize(float weight) => TextMinSize;
 
     public static bool IsBlankText(string text) => string.IsNullOrWhiteSpace(text);
 

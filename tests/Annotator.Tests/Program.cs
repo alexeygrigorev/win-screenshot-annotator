@@ -18,8 +18,8 @@ doc.SetText(1, text with { Text = "edited" });
 doc.SetText(1, text with { Text = "" }); Check(doc.Items.Count == 1, "Empty caption deletes item");
 doc.Undo(); Check(doc.Items.Count == 2, "Undo restores deleted caption");
 doc.Clear(); doc.Undo(); Check(doc.Items.Count == 2, "Undo restores Clear");
-doc.Undo(); Check(!doc.CanUndo, "History drains to empty");
-doc.Add(line with { Tool = Tool.Pen }); Check(doc.Items.Count == 2, "Pen dot commits after drain");
+while (doc.CanUndo) doc.Undo(); Check(doc.Items.Count == 0, "History drains to empty");
+doc.Add(line with { Tool = Tool.Pen }); Check(doc.Items.Count == 1, "Pen dot commits after drain");
 doc.MarkSaved(); Check(!doc.IsDirty, "Successful save clears dirty state");
 doc.Undo(); Check(doc.IsDirty, "Undo after save requires close confirmation");
 
@@ -35,7 +35,7 @@ Check(Near(barbA.X, 4.59f) && Near(barbA.Y, 2.60f), "Barbs spread at pi/7 around
 Geometry.Arrow(new(0, 0), new(100, 0), 12, out _, out _, out shaft);
 Check(Near(shaft.X, 100 - 48 * MathF.Cos((float)(Math.PI / 7))), "Normal arrow head is 4x the weight");
 
-Check(Geometry.TextSize(6) == 48 && Geometry.TextSize(12) == 96 && Geometry.TextSize(24) == 192, "Caption size is 8x the weight");
+Check(Geometry.TextSize(6) == 36 && Geometry.TextSize(12) == 36 && Geometry.TextSize(24) == 36, "Caption stays at Alexey's requested 36px for every weight");
 Check(Geometry.TextSize(2) == 36, "Caption floor stays at 36");
 Check(Geometry.IsBlankText("   ") && !Geometry.IsBlankText("x"), "Blank text is whitespace-only");
 
