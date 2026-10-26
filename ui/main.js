@@ -31,4 +31,4 @@ document.addEventListener('keydown',e=>{
  if(e.ctrlKey && e.key.toLowerCase()==='s'){e.preventDefault();window.annotator.export('save');}
  if(e.ctrlKey && e.key.toLowerCase()==='c' && e.target.tagName!=='TEXTAREA'){e.preventDefault();window.annotator.export('copy');}
 });
-document.fonts.ready.then(()=>bridge({kind:'ready'}));
+document.fonts.load('600 36px "Inter Variable"').then(()=>document.fonts.ready).then(()=>bridge({kind:'ready'}));
