@@ -47,6 +47,14 @@ try {
  await page.keyboard.press('Escape');assert.equal(await page.locator('.actions.confirm').count(),0);
  await drag('Line',[50,50],[150,66],true);
  const line=await page.evaluate(()=>window.annotator.state().items.at(-1));assert.equal(line.points[0].y,line.points[1].y);
+ const scaled=await b.newPage({viewport:{width:960,height:760},deviceScaleFactor:1.5});
+ await scaled.goto(`http://127.0.0.1:${server.address().port}`);
+ await scaled.waitForFunction(()=>!!window.annotator);
+ await scaled.evaluate(url=>window.annotator.load({url,width:900,height:550},1/devicePixelRatio),url);
+ const physical=await scaled.evaluate(()=>{const s=window.annotator.state();return {width:s.sheet.width*devicePixelRatio,height:s.sheet.height*devicePixelRatio,toolbarButton:document.querySelector('.tool-btn').getBoundingClientRect().width*devicePixelRatio};});
+ assert.equal(Math.round(physical.width),900);assert.equal(Math.round(physical.height),550);assert.equal(physical.toolbarButton,36);
+ await scaled.close();
+ console.log('PASS 150% renderer scale: sheet is 900x550 physical pixels; toolbar follows OS scale');
  assert.deepEqual(errors,[]);
  console.log('PASS actual DoodleCanvas: geometry, 36px caption, text edit, undo, clear, discard guard, Shift snapping');
 } finally {await b.close();server.close();}

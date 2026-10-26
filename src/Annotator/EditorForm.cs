@@ -107,30 +107,33 @@ internal sealed class EditorForm : Form
         await Ready.WaitAsync(TimeSpan.FromSeconds(30));
         SourceSize = image.Size;
         var work = Screen.FromPoint(origin ?? Cursor.Position).WorkingArea;
-        // CSS pixels are physical pixels even on a 150%/200% monitor.
-        // The image may fit only when it exceeds the available work area.
+        // Move to the target monitor before measuring its renderer scale.
+        // Keep chrome at the OS scale; only the sheet converts physical image
+        // pixels into CSS pixels. This also keeps the editing caret aligned.
+        Location = origin ?? work.Location;
+        web.ZoomFactor = 1;
+        var pixelRatio = JsonSerializer.Deserialize<double>(await Script("devicePixelRatio"));
         var oversized = image.Width > work.Width || image.Height > work.Height;
-        var scale = oversized ? Math.Min(1d, Math.Min((work.Width - 42d) / image.Width, (work.Height - 179d) / image.Height)) : 1d;
+        var scale = oversized ? Math.Min(1d, Math.Min((work.Width - 42 * pixelRatio) / image.Width, (work.Height - 179 * pixelRatio) / image.Height)) : 1d;
         scale = Math.Max(.01, scale);
         DisplaySize = new Size((int)Math.Round(image.Width * scale), (int)Math.Round(image.Height * scale));
-        ClientSize = new Size(Math.Max(560, DisplaySize.Width + 42), DisplaySize.Height + 179);
-        Location = origin ?? new Point(work.X + (work.Width - Width) / 2, work.Y + (work.Height - Height) / 2);
-        _ = Handle;
-        web.ZoomFactor = 96d / DeviceDpi;
+        ClientSize = new Size(Math.Max((int)Math.Ceiling(560 * pixelRatio), DisplaySize.Width + (int)Math.Ceiling(42 * pixelRatio)), DisplaySize.Height + (int)Math.Ceiling(179 * pixelRatio));
+        if (!origin.HasValue) Location = new Point(work.X + (work.Width - Width) / 2, work.Y + (work.Height - Height) / 2);
         // Lossless BMP crosses the in-process resource bridge without PNG
         // compression or a multi-megabyte base64 script on the hotkey path.
         using var bitmap = new MemoryStream();
         image.Save(bitmap, ImageFormat.Bmp);
         backdropBytes = bitmap.ToArray();
-        var below = origin.HasValue && origin.Value.Y - work.Y < 104;
+        var below = origin.HasValue && origin.Value.Y - work.Y < 104 * pixelRatio;
+        var side = (int)Math.Round(21 * pixelRatio);
         var windowX = origin.HasValue
-            ? Math.Clamp(origin.Value.X - 21, work.Left - 21, Math.Max(work.Left - 21, work.Right - Width + 21))
+            ? Math.Clamp(origin.Value.X - side, work.Left - side, Math.Max(work.Left - side, work.Right - Width + side))
             : Location.X;
-        var offsetX = origin.HasValue ? Math.Max(0, origin.Value.X - windowX - 21) : 0;
-        await Script($"document.body.classList.toggle('chrome-below', {below.ToString().ToLowerInvariant()}); document.documentElement.style.setProperty('--sheet-offset-x','{offsetX}px')");
+        var offsetX = origin.HasValue ? Math.Max(0, origin.Value.X - windowX - side) / pixelRatio : 0;
+        await Script($"document.body.classList.toggle('chrome-below', {below.ToString().ToLowerInvariant()}); document.documentElement.style.setProperty('--sheet-offset-x','{offsetX.ToString(System.Globalization.CultureInfo.InvariantCulture)}px')");
         loaded = new();
         var payload = JsonSerializer.Serialize(new { url = "https://annotator.local/backdrop.bmp", width = image.Width, height = image.Height });
-        await Script($"window.annotator.load({payload},{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+        await Script($"window.annotator.load({payload},{(scale / pixelRatio).ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         var metrics = await loaded.Task.WaitAsync(TimeSpan.FromSeconds(15));
         var sheet = metrics.GetProperty("sheet");
         var dpr = metrics.GetProperty("dpr").GetDouble();
