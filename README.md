@@ -1,65 +1,55 @@
 # Screenshot Annotator for Windows
 
-## How to run
+Capture a region, annotate it with the PocketShell Desktop drawing tools, then copy or save a PNG. The app starts in the Windows notification area (tray) and waits for a global hotkey.
 
-1. Download `ScreenshotAnnotator-ARM64.exe` (ARM / Surface / Snapdragon) or `ScreenshotAnnotator-AMD64.exe` (Intel / AMD) from [Releases](https://github.com/alexeygrigorev/win-screenshot-annotator/releases/latest).
-2. Double-click it. It is unsigned, so if SmartScreen appears click **More info → Run anyway**. Nothing pops up: it starts quietly in the notification area (tray).
-3. Press Ctrl+Alt+A any time to select a region and annotate it. Launching it again just shows an "already running" tray message.
+## Run
 
-Capture a region, draw on it immediately, then copy or save a PNG. The app uses C# / Windows Forms with GDI capture and a Win32 global hotkey, with no Electron or browser runtime. Windows is the supported platform.
+Choose the release for your processor:
 
-## Install on Tabo / Surface
+1. Download `ScreenshotAnnotator-ARM64.exe` for Surface/Snapdragon Windows, or `ScreenshotAnnotator-AMD64.exe` for Intel/AMD Windows, from [Releases](https://github.com/alexeygrigorev/win-screenshot-annotator/releases/latest).
+2. Move the EXE somewhere permanent, such as `%LOCALAPPDATA%\ScreenshotAnnotator`, and run it. If SmartScreen appears for an unsigned release, choose More info → Run anyway after checking the release's `SHA256SUMS.txt` with `Get-FileHash`.
+3. Press Ctrl+Alt+A, drag over a region, then release to annotate it. Launching the EXE again shows an "already running" tray message.
 
-Use the portable release for your Windows architecture:
+You need Windows 11, or Windows 10 22H2 with applicable .NET support, and Microsoft Edge WebView2 Runtime. Windows 11 includes WebView2. If it's missing, install the [Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download). The single EXE includes .NET 10 and the drawing UI. You don't need the .NET SDK to run it.
 
-1. Open [Releases](https://github.com/alexeygrigorev/win-screenshot-annotator/releases/latest).
-2. Download ScreenshotAnnotator-ARM64.exe for ARM Windows (Tabo / Snapdragon Surface), or ScreenshotAnnotator-AMD64.exe for Intel/AMD Windows. Check Settings → System → About → System type if unsure.
-3. Optionally move the EXE somewhere permanent, such as `%LOCALAPPDATA%\ScreenshotAnnotator`. It is a single self-contained file; nothing else is needed.
-4. Run it. It starts silently in the notification area and waits for Ctrl+Alt+A. Drag over the screen and release to open the editor. Escape cancels capture. The app stays in the notification area after closing an editor. Only one copy runs; launching it again shows a tray balloon instead of capturing. Pass `--capture` to start a region capture immediately at launch.
+Use Tray → Settings → Start with Windows to start quietly when you sign in. This writes a per-user Windows startup entry without admin rights. To uninstall, clear that checkbox, exit from the tray menu, then delete the EXE.
 
-Requires Windows 11 (or Windows 10 22H2 with applicable .NET support). The .NET 10 runtime is included, so you don't need an SDK or installer. You don't need admin rights to run it.
-
-Release binaries are unsigned unless the release notes say otherwise, so Windows may show a SmartScreen reputation prompt. Verify the downloaded EXE against the release's `SHA256SUMS.txt` with `Get-FileHash` before choosing to run it.
-
-To start the app when you sign in, use Tray → Settings → Start with Windows (a per-user entry; no admin rights needed). To uninstall, untick that box, exit from the tray menu, then delete the EXE.
+The tray menu also offers desktop capture, opening an image, pasting an image, and exiting. Double-click the tray icon to capture a region. Pass `--capture` to capture immediately at launch.
 
 ## Controls
 
-| Hotkey | Action |
+| Key | Action |
 | --- | --- |
 | Ctrl+Alt+A | Global: select a screenshot region |
-| Ctrl+Alt+F | Global: capture the full virtual desktop, across monitors |
-| P / L / A / R / E / T | Editor: pen / line / arrow / rectangle / ellipse / text |
-| Shift while dragging | Snap line or arrow to the nearest 45° direction |
-| Ctrl+Z / Ctrl+Y | Undo / redo annotations, text edits, deletion, and Clear |
-| Ctrl+C | Copy flattened image; while typing, copy selected text |
-| Ctrl+S | Save PNG, including any caption being edited |
-| Enter | Newline in a caption |
-| Ctrl+Enter / Escape while typing | Commit caption and keep editor open |
-| Escape in editor | Close; unsaved work offers Keep editing, Save PNG, or Discard |
-| Escape during close confirmation | Keep editing |
+| Ctrl+Alt+F | Global: capture the full virtual desktop |
+| Shift while dragging | Snap a line or arrow to the nearest 45° direction |
+| Ctrl+Z | Undo a mark, caption edit, deletion, or Clear |
+| Ctrl+C | Copy the annotated image; while typing, copy selected text |
+| Ctrl+S | Save PNG, including a caption being edited |
+| Enter while typing | Add a newline |
+| Ctrl+Enter or Escape while typing | Commit the caption |
+| Escape in the editor | Ask whether to discard the drawing |
+| Escape during confirmation | Keep editing |
 
-Use the toolbar to choose a tool, ink colour, or stroke weight. It also provides undo and redo alongside Clear, Copy, and Save PNG. Click an existing caption with the text tool to edit it, or empty it to delete it.
+Use the icon toolbar for freehand drawing and text, or to add lines, arrows, rectangles and ellipses. The six colours and 6/12/24 stroke weights match PocketShell. The default is red at weight 12, and captions stay at 36px with font weight 600.
 
-Text size follows stroke weight, with a minimum size to keep text readable, and a pen click adds a dot. Clicking without dragging adds nothing for lines and outlines, while rectangles and ellipses can have any proportions. PNG dimensions match the original capture, even when the preview scales down.
+ Click an existing caption with the text tool to edit it, or empty it to delete it. A pen click paints a dot.
 
-The notification-area menu also offers region and desktop capture. You can also open an image, paste an image, or exit. Double-click its icon to capture a region.
+Undo and Clear sit at the right of the toolbar. Copy and Save PNG sit in the footer. To discard a drawing, click Discard in the confirmation bar.
 
-Hotkeys are fixed defaults, and only one app instance runs per Windows session. If a hotkey can't be registered, the app shows a message and tray commands remain available.
+The captured image opens over the selected region at its original physical pixel size. Large captures may fit the work area. PNG exports retain their original resolution. For a selection near the screen's top edge, find the toolbar beneath the image.
 
-## Behavior and implementation
+## Implementation and verification
 
-Ports the annotation behavior documented in PocketShell Desktop `docs/COMPOSER.md` §27, `docs/SHORTCUTS.md` §1.5, and its shared `DoodleCanvas.vue` / `doodleGeometry.ts`. The app runs independently of PocketShell. Attachment staging and composer integration are outside this app's scope.
+The native Windows tray process handles capture and global hotkeys. It also handles clipboard export, file dialogs, and placement. A hidden WebView2 editor loads ahead of capture.
 
-Annotations are vector items with version history, rather than per-stroke screenshots. Preview and export use the same painter, and export commits the caption being edited before flattening. Saving clears the unsaved flag, while copying keeps it.
+ We render PocketShell's `DoodleCanvas.vue` with its text editor and painter in WebView2. We embed its geometry, icons, and design tokens in the EXE. There's no Electron dependency.
 
-To discard unsaved edits when closing, click Discard. The app doesn't upload images or send telemetry, and it has no background network activity. Captures and annotations live in memory until saved or copied, so drafts don't persist after exit.
+The app serves its drawing UI from embedded resources and doesn't upload captures. Preview and export use the same canvas painter. Before closing an editor, the app asks whether to discard the drawing.
 
-The app captures the Windows virtual desktop in physical pixels and supports negative monitor coordinates. Our editor windows are hidden briefly before capture. Windows can return blank pixels for protected video or secure desktops. Content in elevated or protected windows may also appear blank. Multi-monitor layouts with mixed display scaling should be checked on the target hardware.
+See [parity evidence](docs/parity/README.md) for screenshots and Windows test results. The vendored source revision and file hashes are in [provenance.json](ui/vendor/provenance.json). In the Windows host, we preserve 36px captions and original image resolution. We also provide physical pixel placement and Copy/Save actions.
 
-## Build and test
-
-Install the .NET 10 SDK, then:
+Install .NET 10 to build the app with the committed UI bundle:
 
 ```powershell
 dotnet run --project tests/Annotator.Tests -c Release
@@ -68,12 +58,20 @@ dotnet publish src/Annotator -c Release -r win-arm64 --self-contained true -o ar
 dotnet publish src/Annotator -c Release -r win-x64 --self-contained true -o artifacts/amd64
 ```
 
-On Windows, run `WinScreenshotAnnotator.exe --self-test` from a writable working directory. It exits with code 0 on success and writes `artifacts/self-test/results.txt`, an annotated PNG, and an editor screenshot. It tests desktop capture and global keyboard delivery alongside UI drawing. It also checks caption export, clipboard copy, and close protection.
+To resync from PocketShell and rebuild the UI, install Python 3 and Node 24:
 
-The self-test temporarily replaces the clipboard image. Core model and geometry tests also run on Linux.
+```bash
+python3 scripts/sync-doodle-ui.py
+npm --prefix ui ci
+npm --prefix ui run build
+npx --prefix ui playwright install chromium
+npm --prefix ui test
+```
 
-The app icon is drawn in `assets/icon.svg`; run `assets/make-icon.sh` to regenerate the multi-size `assets/icon.ico` (16–256 px) used for the EXE, tray, and editor windows.
+Set `POCKETSHELL_CORE` to the PocketShell Core directory if it isn't `~/git/pocketshell-core`. Commit the regenerated source and bundle together. Windows CI rebuilds the UI and fails if the bundle differs from the committed version.
 
-[Windows CI](https://github.com/alexeygrigorev/win-screenshot-annotator/actions/workflows/windows.yml) builds and runs tests on native AMD64 and ARM64 runners, builds a single-file self-contained EXE per architecture, runs the integration self-test against that EXE, and publishes the EXEs (plus ZIPs holding only the EXE and README) on `v*` tags with a `SHA256SUMS.txt`. See [self-contained deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [Win32 hotkey registration](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey).
+On Windows, run `WinScreenshotAnnotator.exe --self-test` from a writable directory. It writes `artifacts/self-test/results.txt` and screenshots. It tests keyboard delivery, region selection, drawing and caption editing. It also checks clipboard export, placement, startup timing and the discard guard. It temporarily replaces the clipboard image.
 
-MIT licensed.
+[Windows CI](https://github.com/alexeygrigorev/win-screenshot-annotator/actions/workflows/windows.yml) tests native AMD64 and ARM64 builds. On `v*` tags, it publishes one EXE per architecture, ZIPs containing the EXE and README, and `SHA256SUMS.txt`.
+
+Run `assets/make-icon.sh` to regenerate the EXE and tray icon from `assets/icon.svg`. The app is MIT licensed.
