@@ -1,9 +1,12 @@
 /* Only host geometry differs: physical 1:1 sheet, attached chrome, no 2048px cap. */
 * { box-sizing:border-box; }
 html,body { margin:0; background:var(--surface);color:var(--fg);font-family:var(--font-ui);font-size:var(--fs-200); }
-main { padding:12px; }
+main { padding:12px;display:flex;flex-direction:column; }
+.doodle { order:1; }
+.chrome-below .title { order:2; }
+.chrome-below .frame { order:-1; }
 .title { height:28px;display:flex;align-items:center;justify-content:space-between;font-weight:600; }
 .title button { background:transparent;border:0;color:var(--fg-secondary);font-size:22px;cursor:pointer; }
-.doodle > .frame { justify-content:flex-start; }
+.doodle > .frame { justify-content:flex-start;padding-left:calc(8px + var(--sheet-offset-x,0px)); }
 .sheet { width:var(--sheet-width)!important;height:var(--sheet-height)!important;max-width:none!important;max-height:none!important; }
 .doodle .actions { min-height:46px; }

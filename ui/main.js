@@ -17,7 +17,9 @@ window.annotator = {
       if(c.width===data.width && c.height===data.height) break;
       await new Promise(r=>setTimeout(r,10));
     }
-    await new Promise(requestAnimationFrame);
+    // Hidden prewarmed WebViews may suspend animation frames. Report layout
+    // after the image load and Vue update; the host measures paint after Show.
+    await new Promise(r=>setTimeout(r,0));
     bridge({kind:'loaded',sheet:rect(c),dpr:devicePixelRatio});
   },
   close: () => component.value.requestClose(),

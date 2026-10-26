@@ -12,6 +12,8 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <PublishTrimmed>false</PublishTrimmed>
+    <!-- SDK reference documentation is not a runtime dependency. -->
+    <AllowedReferenceRelatedFileExtensions>.pdb</AllowedReferenceRelatedFileExtensions>
   </PropertyGroup>
   <ItemGroup><EmbeddedResource Include="../../assets/icon.ico" LogicalName="Annotator.icon.ico" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../Annotator.Core/Annotator.Core.csproj" /></ItemGroup>
@@ -20,4 +22,7 @@
   </ItemGroup>
   <ItemGroup><EmbeddedResource Include="Web/*" LogicalName="Annotator.Web.%(Filename)%(Extension)" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="ParitySample.png" LogicalName="Annotator.ParitySample.png" /></ItemGroup>
+  <Target Name="ExcludeUnusedWebViewWpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup><Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" /></ItemGroup>
+  </Target>
 </Project>

@@ -95,6 +95,10 @@ internal static class SmokeTests
         Check(editor.DisplaySize == sample.Size, "Image display equals selected 900x550 physical pixels");
         Check(await Eval(editor,"document.querySelectorAll('.toolbar .group')[0].querySelectorAll('button').length === 6"), "Toolbar has all six original icon tools");
         Check(await Eval(editor,"window.annotator.state().width === 12 && window.annotator.state().pen === '--error'"), "Default ink and weight match PocketShell");
+        Check(await Eval(editor,"Array.from(document.querySelectorAll('.toolbar .group')[1].querySelectorAll('.swatch')).map(e=>getComputedStyle(e).backgroundColor).join('|') === 'rgb(239, 68, 68)|rgb(245, 158, 11)|rgb(34, 197, 94)|rgb(34, 211, 238)|rgb(167, 139, 250)|rgb(230, 237, 243)'"), "All six colour tokens match the reference in order");
+        await Click(editor,"button[aria-label='Mark weight 24']");
+        Check(await Eval(editor,"window.annotator.state().width === 24"),"Weight controls change the active mark width");
+        await Click(editor,"button[aria-label='Mark weight 12']");
         await Drag(editor,"Arrow",new(80,280),new(260,210));
         await Drag(editor,"Rectangle",new(300,160),new(650,330));
         await Drag(editor,"Draw",new(100,400),new(100,400));
@@ -109,6 +113,9 @@ internal static class SmokeTests
         await Screenshot(editor,"editor");
         var png = JsonSerializer.Deserialize<string>(await editor.Script("document.querySelector('canvas').toDataURL('image/png')"))!;
         File.WriteAllBytes("artifacts/self-test/annotated.png",Convert.FromBase64String(png.Split(',')[1]));
+        using (var pngStream = new MemoryStream(Convert.FromBase64String(png.Split(',')[1])))
+        using (var painted = new Bitmap(pngStream))
+            Check(painted.GetPixel(100,400).R > 200 && painted.GetPixel(100,400).G < 100, "Pen click paints a red dot at the same reference coordinate");
         await editor.Script("window.annotator.export('copy')");
         for(int i=0;i<100 && !Clipboard.ContainsImage();i++) await Task.Delay(10);
         using var pasted=Clipboard.GetImage();
@@ -133,6 +140,19 @@ internal static class SmokeTests
         editor.Close(); await Task.Delay(100);
         Check(!editor.IsDisposed,"Repeated window close never discards work");
         editor.CloseForTest();
+        // A small near-edge selection keeps its 1:1 pixels and moves attached
+        // chrome below the image instead of pushing the image away from it.
+        using (var edge = new EditorForm())
+        using (var small = new Bitmap(200,150))
+        {
+            await edge.Ready.WaitAsync(TimeSpan.FromSeconds(30));
+            var work = Screen.PrimaryScreen!.WorkingArea;
+            var selected = new Point(work.Right - 200, work.Top);
+            await edge.ShowImageAsync(small,selected);
+            Check(edge.DisplaySize == small.Size && edge.ImageOrigin == selected,"Top-right edge selection remains 1:1 at its original physical position");
+            Check(await Eval(edge,"document.body.classList.contains('chrome-below')"),"Toolbar attaches below a selection near the top edge");
+            edge.CloseForTest();
+        }
         var previous = Autostart.Current;
         try
         {

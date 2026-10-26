@@ -108,7 +108,8 @@ internal sealed class EditorForm : Form
         var work = Screen.FromPoint(origin ?? Cursor.Position).WorkingArea;
         // CSS pixels are physical pixels even on a 150%/200% monitor.
         // The image may fit only when it exceeds the available work area.
-        var scale = Math.Min(1d, Math.Min((work.Width - 42d) / image.Width, (work.Height - 166d) / image.Height));
+        var oversized = image.Width > work.Width || image.Height > work.Height;
+        var scale = oversized ? Math.Min(1d, Math.Min((work.Width - 42d) / image.Width, (work.Height - 166d) / image.Height)) : 1d;
         scale = Math.Max(.01, scale);
         DisplaySize = new Size((int)Math.Round(image.Width * scale), (int)Math.Round(image.Height * scale));
         ClientSize = new Size(Math.Max(560, DisplaySize.Width + 42), DisplaySize.Height + 166);
@@ -117,6 +118,12 @@ internal sealed class EditorForm : Form
         web.ZoomFactor = 96d / DeviceDpi;
         using var png = new MemoryStream();
         image.Save(png, ImageFormat.Png);
+        var below = origin.HasValue && origin.Value.Y - work.Y < 91;
+        var windowX = origin.HasValue
+            ? Math.Clamp(origin.Value.X - 21, work.Left - 21, Math.Max(work.Left - 21, work.Right - Width + 21))
+            : Location.X;
+        var offsetX = origin.HasValue ? Math.Max(0, origin.Value.X - windowX - 21) : 0;
+        await Script($"document.body.classList.toggle('chrome-below', {below.ToString().ToLowerInvariant()}); document.documentElement.style.setProperty('--sheet-offset-x','{offsetX}px')");
         loaded = new();
         var payload = JsonSerializer.Serialize(new { url = "data:image/png;base64," + Convert.ToBase64String(png.ToArray()), width = image.Width, height = image.Height });
         await Script($"window.annotator.load({payload},{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
