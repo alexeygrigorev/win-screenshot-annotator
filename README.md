@@ -1,5 +1,11 @@
 # Screenshot Annotator for Windows
 
+## How to run
+
+1. Download `ScreenshotAnnotator-ARM64.exe` (ARM / Surface / Snapdragon) or `ScreenshotAnnotator-AMD64.exe` (Intel / AMD) from [Releases](https://github.com/alexeygrigorev/win-screenshot-annotator/releases/latest).
+2. Double-click it. It is unsigned, so if SmartScreen appears click **More info → Run anyway**.
+3. Press Ctrl+Alt+A to select a region and annotate it.
+
 Capture a region, draw on it immediately, then copy or save a PNG. The app uses C# / Windows Forms with GDI capture and a Win32 global hotkey, with no Electron or browser runtime. Windows is the supported platform.
 
 ## Install on Tabo / Surface
@@ -7,15 +13,15 @@ Capture a region, draw on it immediately, then copy or save a PNG. The app uses 
 Use the portable release for your Windows architecture:
 
 1. Open [Releases](https://github.com/alexeygrigorev/win-screenshot-annotator/releases/latest).
-2. Download ScreenshotAnnotator-ARM64.zip for ARM Windows (Tabo / Snapdragon Surface), or ScreenshotAnnotator-AMD64.zip for Intel/AMD Windows. Check Settings → System → About → System type if unsure.
-3. Extract the whole ZIP into a folder such as `%LOCALAPPDATA%\ScreenshotAnnotator`. Keep its files together.
-4. Run `WinScreenshotAnnotator.exe`. A region selector opens immediately. Drag over the screen and release to open the editor. Escape cancels capture. The app stays in the notification area after closing an editor.
+2. Download ScreenshotAnnotator-ARM64.exe for ARM Windows (Tabo / Snapdragon Surface), or ScreenshotAnnotator-AMD64.exe for Intel/AMD Windows. Check Settings → System → About → System type if unsure.
+3. Optionally move the EXE somewhere permanent, such as `%LOCALAPPDATA%\ScreenshotAnnotator`. It is a single self-contained file; nothing else is needed.
+4. Run it. A region selector opens immediately. Drag over the screen and release to open the editor. Escape cancels capture. The app stays in the notification area after closing an editor.
 
 Requires Windows 11 (or Windows 10 22H2 with applicable .NET support). The .NET 10 runtime is included, so you don't need an SDK or installer. You don't need admin rights to run it.
 
-Release binaries are unsigned, so Windows may show a SmartScreen reputation prompt. Verify the downloaded ZIP against the release's `SHA256SUMS.txt` with `Get-FileHash` before choosing to run it.
+Release binaries are unsigned, so Windows may show a SmartScreen reputation prompt. Verify the downloaded EXE against the release's `SHA256SUMS.txt` with `Get-FileHash` before choosing to run it.
 
-To start the app when you sign in, press Win+R, enter `shell:startup`, and add a shortcut to the EXE with `--tray` in its target. `--tray` starts quietly without capturing. To uninstall, exit from the tray menu, then remove the extracted folder and startup shortcut.
+To start the app when you sign in, press Win+R, enter `shell:startup`, and add a shortcut to the EXE with `--tray` in its target. `--tray` starts quietly without capturing. To uninstall, exit from the tray menu, then delete the EXE and startup shortcut.
 
 ## Controls
 
@@ -66,6 +72,6 @@ On Windows, run `WinScreenshotAnnotator.exe --self-test` from a writable working
 
 The self-test temporarily replaces the clipboard image. Core model and geometry tests also run on Linux.
 
-[Windows CI](https://github.com/alexeygrigorev/win-screenshot-annotator/actions/workflows/windows.yml) builds and runs tests on native AMD64 and ARM64 runners, uploads portable ZIPs and test evidence, and publishes both ZIPs on `v*` tags. Each package includes SHA-256 hashes, and the release also hashes the ZIPs. See [self-contained deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [Win32 hotkey registration](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey).
+[Windows CI](https://github.com/alexeygrigorev/win-screenshot-annotator/actions/workflows/windows.yml) builds and runs tests on native AMD64 and ARM64 runners, builds a single-file self-contained EXE per architecture, runs the integration self-test against that EXE, and publishes the EXEs (plus ZIPs holding only the EXE and README) on `v*` tags with a `SHA256SUMS.txt`. See [self-contained deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [Win32 hotkey registration](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey).
 
 MIT licensed.

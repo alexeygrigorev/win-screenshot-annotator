@@ -27,27 +27,32 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Core regression tests
         run: dotnet run --project tests/Annotator.Tests -c Release
-      - name: Build portable app with bundled runtime
-        run: dotnet publish src/Annotator -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish -p:DebugType=None -p:DebugSymbols=false
-      - name: Native Windows integration tests
+      - name: Build single-file portable EXE (runtime bundled)
         shell: pwsh
         run: |
-          $process = Start-Process artifacts/publish/WinScreenshotAnnotator.exe -ArgumentList '--self-test' -PassThru -Wait
+          dotnet publish src/Annotator -c Release -r ${{ matrix.rid }} --self-contained true -o artifacts/publish -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:SatelliteResourceLanguages=en -p:DebugType=None -p:DebugSymbols=false
+          $files = @(Get-ChildItem artifacts/publish -Recurse -File)
+          $files | Format-Table Name, Length
+          if ($files.Count -ne 1 -or $files[0].Name -ne 'WinScreenshotAnnotator.exe') { throw "Expected exactly one published file (WinScreenshotAnnotator.exe), got $($files.Count)" }
+          New-Item -ItemType Directory -Force artifacts/release | Out-Null
+          Copy-Item artifacts/publish/WinScreenshotAnnotator.exe artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe
+      - name: Native Windows integration tests (single-file EXE)
+        shell: pwsh
+        run: |
+          $process = Start-Process artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe -ArgumentList '--self-test' -PassThru -Wait
           Get-Content artifacts/self-test/results.txt
           if ($process.ExitCode -ne 0) { throw "Windows integration tests failed: $($process.ExitCode)" }
-      - name: Include instructions and checksums
+      - name: Package EXE and ZIP (EXE + README only)
         shell: pwsh
         run: |
-          Copy-Item README.md,LICENSE artifacts/publish/
-          Get-ChildItem artifacts/publish -File | ForEach-Object {
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($_.Name)"
-          } | Set-Content artifacts/publish/SHA256SUMS.txt
-          Compress-Archive -Path artifacts/publish/* -DestinationPath artifacts/ScreenshotAnnotator-${{ matrix.label }}.zip
+          New-Item -ItemType Directory -Force artifacts/zip | Out-Null
+          Copy-Item artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe,README.md artifacts/zip/
+          Compress-Archive -Path artifacts/zip/* -DestinationPath artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.zip
+          Get-ChildItem artifacts/release | Format-Table Name, Length
       - uses: actions/upload-artifact@v4
         with:
           name: ScreenshotAnnotator-${{ matrix.label }}
-          path: artifacts/ScreenshotAnnotator-${{ matrix.label }}.zip
+          path: artifacts/release/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -69,5 +74,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum release/*.zip > release/SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "Screenshot Annotator $GITHUB_REF_NAME" --notes "Portable native Windows app. Download ARM64 for Surface/Tabo or AMD64 for Intel/AMD. Extract the entire ZIP and run WinScreenshotAnnotator.exe. Ctrl+Alt+A captures a region; Ctrl+Alt+F captures the desktop. Runtime included. Unsigned binaries. See README for controls and installation."
+          cd release
+          sha256sum ScreenshotAnnotator-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          {
+            echo "Portable native Windows app: one self-contained EXE per CPU. Nothing to install or extract."
+            echo
+            echo "- ARM64 (Surface / Snapdragon / Tabo): ScreenshotAnnotator-ARM64.exe"
+            echo "- AMD64 (Intel / AMD): ScreenshotAnnotator-AMD64.exe"
+            echo
+            echo "Double-click the EXE, then press Ctrl+Alt+A to capture a region (Ctrl+Alt+F: full desktop). The binaries are unsigned: if SmartScreen appears, click More info, then Run anyway. The ZIPs contain only the same EXE plus README."
+            echo
+            echo "SHA-256:"
+            echo
+            sed 's/^/    /' SHA256SUMS.txt
+          } > ../notes.md
+          cd ..
+          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "Screenshot Annotator $GITHUB_REF_NAME" --notes-file notes.md
