@@ -110,10 +110,10 @@ internal sealed class EditorForm : Form
         // CSS pixels are physical pixels even on a 150%/200% monitor.
         // The image may fit only when it exceeds the available work area.
         var oversized = image.Width > work.Width || image.Height > work.Height;
-        var scale = oversized ? Math.Min(1d, Math.Min((work.Width - 42d) / image.Width, (work.Height - 166d) / image.Height)) : 1d;
+        var scale = oversized ? Math.Min(1d, Math.Min((work.Width - 42d) / image.Width, (work.Height - 179d) / image.Height)) : 1d;
         scale = Math.Max(.01, scale);
         DisplaySize = new Size((int)Math.Round(image.Width * scale), (int)Math.Round(image.Height * scale));
-        ClientSize = new Size(Math.Max(560, DisplaySize.Width + 42), DisplaySize.Height + 166);
+        ClientSize = new Size(Math.Max(560, DisplaySize.Width + 42), DisplaySize.Height + 179);
         Location = origin ?? new Point(work.X + (work.Width - Width) / 2, work.Y + (work.Height - Height) / 2);
         _ = Handle;
         web.ZoomFactor = 96d / DeviceDpi;
@@ -122,7 +122,7 @@ internal sealed class EditorForm : Form
         using var bitmap = new MemoryStream();
         image.Save(bitmap, ImageFormat.Bmp);
         backdropBytes = bitmap.ToArray();
-        var below = origin.HasValue && origin.Value.Y - work.Y < 91;
+        var below = origin.HasValue && origin.Value.Y - work.Y < 104;
         var windowX = origin.HasValue
             ? Math.Clamp(origin.Value.X - 21, work.Left - 21, Math.Max(work.Left - 21, work.Right - Width + 21))
             : Location.X;

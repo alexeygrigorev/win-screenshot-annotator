@@ -1,9 +1,10 @@
-import { createApp, h, ref, nextTick } from 'vue';
+import { createApp, h, ref } from 'vue';
 import DoodleCanvas from './vendor/app/components/DoodleCanvas.vue';
+import AppIcon from './vendor/components/AppIcon.vue';
 import './vendor/tokens.css';
 import './host.css';
 const bridge = message => window.chrome?.webview?.postMessage(message);
-const source = ref(null), component = ref(null);
+const component = ref(null);
 let action = 'copy';
 const rect = el => { const r=el.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; };
 window.annotator = {
@@ -21,8 +22,8 @@ window.annotator = {
   state: () => ({items:component.value.items,editing:component.value.editing,tool:component.value.tool,pen:component.value.pen,width:component.value.width,sheet:rect(document.querySelector('canvas')),dpr:devicePixelRatio}),
 };
 createApp({setup:()=>()=>h('main',[
- h('header',{class:'title'},[h('span','Annotate'),h('button',{'aria-label':'Close',onClick:()=>window.annotator.close()},'×')]),
- h(DoodleCanvas,{ref:component,backdrop:source.value,backdropName:'Screenshot',onClose:()=>bridge({kind:'close'}),onSave:()=>window.annotator.export('save'),onCommit:p=>{bridge({kind:action,png:p.dataUrl});action='copy';}})
+ h('header',{class:'title'},[h('span','Annotate'),h('button',{'aria-label':'Close',onClick:()=>window.annotator.close()},[h(AppIcon,{name:'close',size:16})])]),
+ h(DoodleCanvas,{ref:component,backdropName:'Screenshot',onClose:()=>bridge({kind:'close'}),onSave:()=>window.annotator.export('save'),onCommit:p=>{bridge({kind:action,png:p.dataUrl});action='copy';}})
 ])}).mount('#app');
 document.addEventListener('keydown',e=>{
  if(e.key==='Escape' && !e.defaultPrevented && e.target.tagName!=='TEXTAREA'){e.preventDefault();window.annotator.close();}

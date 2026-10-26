@@ -116,7 +116,7 @@ internal sealed class CaptureContext : ApplicationContext
     async Task ReportWarmAsync(EditorForm editor)
     {
         try { await editor.Ready; WriteStatus(); }
-        catch (Exception ex) { Error(ex); }
+        catch (Exception ex) { if (!editor.IsDisposed) Error(ex); }
     }
     void AlreadyRunning()
     {
