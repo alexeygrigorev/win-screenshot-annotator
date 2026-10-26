@@ -95,6 +95,25 @@ internal static class SmokeTests
             editor.Close(); Check(!editor.IsDisposed,"Window close retains unsaved annotations");
             canvas.Document.MarkSaved(); editor.Close();
             Check(editor.IsDisposed,"Saved editor closes");
+            var previousAutostart = Autostart.Current;
+            try
+            {
+                Autostart.Set(false);
+                using var settings = new SettingsForm();
+                settings.Show(); Application.DoEvents();
+                Check(!settings.StartWithWindows.Checked,"Settings shows Start with Windows off when Run entry is absent");
+                settings.StartWithWindows.Checked = true;
+                Check(Autostart.Current == $"\"{Environment.ProcessPath}\"","Checking Start with Windows writes HKCU Run entry with the EXE path");
+                results.Add("INFO autostart Run value: " + Autostart.Current);
+                settings.StartWithWindows.Checked = false;
+                Check(Autostart.Current == null,"Unchecking Start with Windows removes the HKCU Run entry");
+                settings.Close();
+            }
+            finally
+            {
+                if (previousAutostart == null) Autostart.Set(false);
+                else using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) key.SetValue(Autostart.ValueName, previousAutostart);
+            }
             results.Add("Windows self-test passed: " + RuntimeInformation.ProcessArchitecture);
             File.WriteAllLines("artifacts/self-test/results.txt",results);
             return 0;

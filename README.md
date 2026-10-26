@@ -19,9 +19,9 @@ Use the portable release for your Windows architecture:
 
 Requires Windows 11 (or Windows 10 22H2 with applicable .NET support). The .NET 10 runtime is included, so you don't need an SDK or installer. You don't need admin rights to run it.
 
-Release binaries are unsigned, so Windows may show a SmartScreen reputation prompt. Verify the downloaded EXE against the release's `SHA256SUMS.txt` with `Get-FileHash` before choosing to run it.
+Release binaries are unsigned unless the release notes say otherwise, so Windows may show a SmartScreen reputation prompt. Verify the downloaded EXE against the release's `SHA256SUMS.txt` with `Get-FileHash` before choosing to run it.
 
-To start the app when you sign in, press Win+R, enter `shell:startup`, and add a shortcut to the EXE. It starts quietly in the tray without capturing (`--tray` is still accepted and does the same). To uninstall, exit from the tray menu, then delete the EXE and startup shortcut.
+To start the app when you sign in, use Tray → Settings → Start with Windows (a per-user entry; no admin rights needed). To uninstall, untick that box, exit from the tray menu, then delete the EXE.
 
 ## Controls
 

@@ -84,6 +84,7 @@ internal sealed class CaptureContext : ApplicationContext
             try { using var image = Clipboard.GetImage(); if (image != null) Open(new Bitmap(image)); }
             catch (Exception ex) { Error(ex); }
         });
+        menu.Items.Add("Settings…", null, (_,_) => ShowSettings());
         menu.Items.Add("Exit", null, (_,_) => ExitThread());
         tray = new NotifyIcon { Icon = AppIcon.Small, Text = "Screenshot Annotator — Ctrl+Alt+A", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_,_) => Capture(true);
@@ -98,6 +99,14 @@ internal sealed class CaptureContext : ApplicationContext
             timer.Start();
         }
         WriteStatus();
+    }
+    SettingsForm? settings;
+    void ShowSettings()
+    {
+        if (settings is { IsDisposed: false }) { settings.Activate(); return; }
+        settings = new SettingsForm();
+        settings.FormClosed += (_,_) => settings = null;
+        settings.Show();
     }
     void AlreadyRunning()
     {

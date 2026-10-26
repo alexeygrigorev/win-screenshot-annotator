@@ -67,6 +67,17 @@ jobs:
           $process = Start-Process artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe -ArgumentList '--self-test' -PassThru -Wait
           Get-Content artifacts/self-test/results.txt
           if ($process.ExitCode -ne 0) { throw "Windows integration tests failed: $($process.ExitCode)" }
+      - name: Autostart check (Settings toggle writes and removes HKCU Run entry)
+        shell: pwsh
+        run: |
+          $r = Get-Content artifacts/self-test/results.txt
+          foreach ($want in 'PASS Checking Start with Windows writes HKCU Run entry with the EXE path', 'PASS Unchecking Start with Windows removes the HKCU Run entry') {
+            if ($r -notcontains $want) { throw "Missing self-test result: $want" }
+          }
+          $r | Select-String 'autostart Run value'
+          $left = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).ScreenshotAnnotator
+          if ($left) { throw "Run entry left behind: $left" }
+          Write-Output 'Autostart check passed'
       - name: Startup behavior check (no args -> tray only, hotkey registered, single instance)
         shell: pwsh
         run: |
@@ -120,32 +131,100 @@ jobs:
         with:
           name: windows-test-evidence-${{ matrix.label }}
           path: artifacts/self-test/
-  release:
+  sign:
+    # Signs both architectures' EXEs on x64 (azure/artifact-signing-action, formerly trusted-signing-action, does not support ARM runners).
     if: startsWith(github.ref, 'refs/tags/v')
     needs: windows
+    runs-on: windows-latest
+    outputs:
+      signed: ${{ steps.state.outputs.signed }}
+    env:
+      HAS_SIGNING: ${{ secrets.AZURE_TENANT_ID != '' && secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_CLIENT_SECRET != '' && secrets.AZURE_SIGNING_ENDPOINT != '' && secrets.AZURE_SIGNING_ACCOUNT != '' && secrets.AZURE_SIGNING_PROFILE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ScreenshotAnnotator-*
+          merge-multiple: true
+          path: release
+      - name: Prepare files to sign
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force tosign | Out-Null
+          Move-Item release/ScreenshotAnnotator-*.exe tosign/
+          Remove-Item release/*.zip
+      - name: Warn when signing is not configured
+        if: env.HAS_SIGNING != 'true'
+        shell: pwsh
+        run: |
+          Write-Output "::warning title=Unsigned release::Code signing skipped: Azure Artifact Signing secrets (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT, AZURE_SIGNING_PROFILE) are not all set. Publishing unsigned EXEs."
+      - name: Sign EXEs with Azure Artifact Signing
+        if: env.HAS_SIGNING == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\tosign
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Verify signatures and repackage
+        id: state
+        shell: pwsh
+        run: |
+          $signed = $env:HAS_SIGNING -eq 'true'
+          foreach ($exe in Get-ChildItem tosign/*.exe) {
+            $sig = Get-AuthenticodeSignature $exe.FullName
+            Write-Output "$($exe.Name): $($sig.Status) $($sig.SignerCertificate.Subject)"
+            if ($signed -and $sig.Status -ne 'Valid') { throw "$($exe.Name) signature is $($sig.Status)" }
+            $label = $exe.BaseName
+            New-Item -ItemType Directory -Force "zip/$label" | Out-Null
+            Copy-Item $exe.FullName, README.md "zip/$label/"
+            Compress-Archive -Path "zip/$label/*" -DestinationPath "release/$label.zip"
+            Copy-Item $exe.FullName release/
+          }
+          "signed=$($signed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          Get-ChildItem release | Format-Table Name, Length
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: release/
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: sign
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: ScreenshotAnnotator-*
-          merge-multiple: true
+          name: release-files
           path: release
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ needs.sign.outputs.signed }}
         run: |
           cd release
           sha256sum ScreenshotAnnotator-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
+          if [ "$SIGNED" = "true" ]; then
+            trust="The EXEs are code-signed (Azure Artifact Signing)."
+          else
+            trust="The binaries are unsigned: if SmartScreen appears, click More info, then Run anyway."
+          fi
           {
             echo "Portable native Windows app: one self-contained EXE per CPU. Nothing to install or extract."
             echo
             echo "- ARM64 (Surface / Snapdragon / Tabo): ScreenshotAnnotator-ARM64.exe"
             echo "- AMD64 (Intel / AMD): ScreenshotAnnotator-AMD64.exe"
             echo
-            echo "Double-click the EXE: it starts quietly in the tray (no window). Press Ctrl+Alt+A to capture a region (Ctrl+Alt+F: full desktop). The binaries are unsigned: if SmartScreen appears, click More info, then Run anyway. The ZIPs contain only the same EXE plus README."
+            echo "Double-click the EXE: it starts quietly in the tray (no window). Press Ctrl+Alt+A to capture a region (Ctrl+Alt+F: full desktop). Tray > Settings > Start with Windows enables autostart. $trust The ZIPs contain only the same EXE plus README."
             echo
             echo "SHA-256:"
             echo
