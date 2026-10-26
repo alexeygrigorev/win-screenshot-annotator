@@ -60,7 +60,7 @@ internal sealed class EditorForm : Form
                 var name = new Uri(e.Request.Uri).AbsolutePath.TrimStart('/');
                 if (name == "") name = "index.html";
                 Stream? stream = name == "backdrop.bmp" && backdropBytes != null ? new MemoryStream(backdropBytes, false) : Assembly.GetExecutingAssembly().GetManifestResourceStream("Annotator.Web." + name);
-                var type = name.EndsWith(".bmp") ? "image/bmp" : name.EndsWith(".js") ? "text/javascript" : name.EndsWith(".css") ? "text/css" : "text/html";
+                var type = name.EndsWith(".woff2") ? "font/woff2" : name.EndsWith(".bmp") ? "image/bmp" : name.EndsWith(".js") ? "text/javascript" : name.EndsWith(".css") ? "text/css" : "text/html";
                 e.Response = web.CoreWebView2.Environment.CreateWebResourceResponse(stream ?? new MemoryStream(), stream == null ? 404 : 200, stream == null ? "Not Found" : "OK", $"Content-Type: {type}; charset=utf-8\r\nCache-Control: no-store");
             };
             web.CoreWebView2.WebMessageReceived += Receive;

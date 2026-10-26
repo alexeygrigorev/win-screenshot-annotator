@@ -87,6 +87,7 @@ internal static class SmokeTests
         using var editor = new EditorForm();
         await editor.Ready.WaitAsync(TimeSpan.FromSeconds(30));
         Check(!editor.Visible, "Prewarmed editor has no visible window");
+        Check(await Eval(editor,"[...document.fonts].some(f=>f.family.includes('Inter Variable') && f.status==='loaded')"), "PocketShell Inter Variable font is bundled and loaded before capture");
         var origin = new Point(60, 160);
         await editor.ShowImageAsync(sample, origin);
         results.Add($"editor_open_warm_ms={editor.OpenLatencyMs} dpi={editor.DeviceDpi}");

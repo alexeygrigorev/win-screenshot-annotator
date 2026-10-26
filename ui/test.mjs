@@ -8,7 +8,7 @@ const server=http.createServer((req,res)=>{
  const name=path.basename(req.url.split('?')[0])||'index.html';
  const file=path.join(root,name);
  if(!fs.existsSync(file)){res.writeHead(404);res.end();return;}
- res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');
+ res.setHeader('Content-Type',name.endsWith('.woff2')?'font/woff2':name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');
  res.end(fs.readFileSync(file));
 }).listen(0,'127.0.0.1');
 await new Promise(r=>server.once('listening',r));
@@ -18,6 +18,8 @@ try {
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`http://127.0.0.1:${server.address().port}`);
  await page.waitForFunction(()=>!!window.annotator);
+ await page.evaluate(()=>document.fonts.ready);
+ assert.equal(await page.evaluate(()=>[...document.fonts].some(f=>f.family.includes('Inter Variable') && f.status==='loaded')),true);
  const url='data:image/png;base64,'+fs.readFileSync(path.resolve(import.meta.dirname,'../src/Annotator/ParitySample.png')).toString('base64');
  await page.evaluate(url=>window.annotator.load({url,width:900,height:550},1),url);
  const c=page.locator('canvas');const box=await c.boundingBox();

@@ -1,6 +1,7 @@
 import { createApp, h, ref } from 'vue';
 import DoodleCanvas from './vendor/app/components/DoodleCanvas.vue';
 import AppIcon from './vendor/components/AppIcon.vue';
+import '@fontsource-variable/inter';
 import './vendor/tokens.css';
 import './host.css';
 const bridge = message => window.chrome?.webview?.postMessage(message);
@@ -30,4 +31,4 @@ document.addEventListener('keydown',e=>{
  if(e.ctrlKey && e.key.toLowerCase()==='s'){e.preventDefault();window.annotator.export('save');}
  if(e.ctrlKey && e.key.toLowerCase()==='c' && e.target.tagName!=='TEXTAREA'){e.preventDefault();window.annotator.export('copy');}
 });
-bridge({kind:'ready'});
+document.fonts.ready.then(()=>bridge({kind:'ready'}));
