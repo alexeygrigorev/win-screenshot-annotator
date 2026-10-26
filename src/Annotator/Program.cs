@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace Annotator;
 
@@ -72,7 +73,9 @@ internal sealed class CaptureContext : ApplicationContext
     readonly RegisteredWaitHandle activateWait;
     readonly string? statusFile = Environment.GetEnvironmentVariable("WSA_STATUS_FILE");
     int balloons, captures;
+    long? lastEditorLatency;
     bool capturing;
+    EditorForm? warmEditor;
     public CaptureContext(bool captureAtStart, EventWaitHandle activate)
     {
         _ = ui.Handle; // UI-thread marshaling target for the second-instance signal.
@@ -108,6 +111,11 @@ internal sealed class CaptureContext : ApplicationContext
         settings.FormClosed += (_,_) => settings = null;
         settings.Show();
     }
+    async Task ReportWarmAsync(EditorForm editor)
+    {
+        try { await editor.Ready; WriteStatus(); }
+        catch (Exception ex) { Error(ex); }
+    }
     void AlreadyRunning()
     {
         balloons++;
@@ -122,6 +130,8 @@ internal sealed class CaptureContext : ApplicationContext
         {
             File.WriteAllLines(statusFile, new[] {
                 $"tray_visible={tray.Visible}",
+                $"editor_ready={warmEditor?.Ready.IsCompletedSuccessfully == true}",
+                $"editor_open_ms={lastEditorLatency}",
                 $"hotkey_region_registered={hotkeys.RegionRegistered}",
                 $"hotkey_desktop_registered={hotkeys.DesktopRegistered}",
                 $"captures_started={captures}",
@@ -139,17 +149,20 @@ internal sealed class CaptureContext : ApplicationContext
         try { using var image = Image.FromFile(dialog.FileName); Open(new Bitmap(image)); }
         catch (Exception ex) { Error(ex); }
     }
-    void Open(Bitmap image, Point? selectionScreenOrigin = null)
+    async void Open(Bitmap image, Point? selectionScreenOrigin = null, Stopwatch? timer = null)
     {
-        EditorForm.MarkOpenStart();
-        var editor = new EditorForm(image, selectionScreenOrigin) { Icon = AppIcon.Large };
+        var editor = warmEditor ?? new EditorForm();
+        warmEditor = null;
         editors.Add(editor);
         editor.FormClosed += (_,_) => editors.Remove(editor);
-        editor.Show(); editor.Activate();
+        try { using (image) await editor.ShowImageAsync(image, selectionScreenOrigin, timer); lastEditorLatency = editor.OpenLatencyMs; WriteStatus(); }
+        catch (Exception ex) { editor.CloseForTest(); Error(ex); }
+        if (warmEditor == null) warmEditor = new EditorForm();
     }
     async void Capture(bool region)
     {
         if (capturing) return;
+        var timer = Stopwatch.StartNew();
         capturing = true; captures++; WriteStatus();
         var visible = editors.Where(e => e.Visible).ToArray();
         try
@@ -164,6 +177,7 @@ internal sealed class CaptureContext : ApplicationContext
                 using var selector = new RegionSelector(desktop, SystemInformation.VirtualScreen);
                 if (selector.ShowDialog() == DialogResult.OK)
                 {
+                    timer.Restart(); // Human region-selection time is excluded.
                     selected = desktop.Clone(selector.Selection, desktop.PixelFormat);
                     // Bitmap coords start at (0,0); the screen origin restores
                     // the virtual-desktop offset (negative on left/top monitors).
@@ -174,7 +188,7 @@ internal sealed class CaptureContext : ApplicationContext
             }
             else selected = new Bitmap(desktop);
             foreach (var editor in visible) editor.Show();
-            if (selected != null) Open(selected, selectionOrigin);
+            if (selected != null) Open(selected, selectionOrigin, timer);
         }
         catch (Exception ex) { foreach (var editor in visible) editor.Show(); Error(ex); }
         finally { capturing = false; }
@@ -183,6 +197,7 @@ internal sealed class CaptureContext : ApplicationContext
     {
         // Close() asks about unsaved annotations. Keep the tray alive if any close is cancelled.
         foreach (var editor in editors.ToArray()) { editor.Close(); if (!editor.IsDisposed) return; }
+        warmEditor?.Dispose();
         activateWait.Unregister(null); tray.Visible = false; tray.Dispose(); hotkeys.Dispose(); ui.Dispose(); base.ExitThreadCore();
     }
 }

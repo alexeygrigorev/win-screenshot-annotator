@@ -1,11 +1,8 @@
-// Native Windows integration test. Runs on CI against the built single-file
-// EXE: desktop capture, hotkey delivery, region selection, PocketShell-parity
-// drawing (same marks as the headless harness), 1:1 placement over the
-// selection, open latency, clipboard, and the discard guard.
+using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Annotator.Core;
+using System.Text.Json;
 
 namespace Annotator;
 
@@ -18,139 +15,140 @@ internal static class SmokeTests
         if (!condition) throw new Exception(description);
         results.Add("PASS " + description);
     }
-    static void Mouse(Control canvas, string name, Point location)
-    {
-        var method = canvas.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
-        method.Invoke(canvas, [new MouseEventArgs(MouseButtons.Left, 1, location.X, location.Y, 0)]);
-    }
-    internal static int Run()
+    static void Mouse(Control canvas, string name, Point location) =>
+        canvas.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(canvas, [new MouseEventArgs(MouseButtons.Left, 1, location.X, location.Y, 0)]);
+    public static int Run()
     {
         Directory.CreateDirectory("artifacts/self-test");
+        int exit = 1;
+        using var loop = new Form { ShowInTaskbar = false, Opacity = 0 };
+        loop.Shown += async (_, _) =>
+        {
+            try { await RunAsync(); exit = 0; }
+            catch (Exception ex) { results.Add("FAIL " + ex); }
+            finally { File.WriteAllLines("artifacts/self-test/results.txt", results); loop.Close(); }
+        };
+        Application.Run(loop);
+        return exit;
+    }
+    static async Task<JsonElement> State(EditorForm editor)
+    {
+        using var json = JsonDocument.Parse(await editor.Script("window.annotator.state()"));
+        return json.RootElement.Clone();
+    }
+    static async Task<bool> Eval(EditorForm editor, string expression) => await editor.Script(expression) == "true";
+    static Task Click(EditorForm editor, string selector) => editor.Script($"document.querySelector({JsonSerializer.Serialize(selector)}).click()");
+    static async Task Key(EditorForm editor, string key, string code, int vk, int modifiers = 0)
+    {
+        await editor.DevTools("Input.dispatchKeyEvent", new { type = "keyDown", key, code, windowsVirtualKeyCode = vk, modifiers });
+        await editor.DevTools("Input.dispatchKeyEvent", new { type = "keyUp", key, code, windowsVirtualKeyCode = vk, modifiers });
+    }
+    static async Task Pointer(EditorForm editor, float x, float y, string type)
+    {
+        var sheet = (await State(editor)).GetProperty("sheet");
+        await editor.DevTools("Input.dispatchMouseEvent", new { type, x = sheet.GetProperty("x").GetDouble() + x, y = sheet.GetProperty("y").GetDouble() + y, button = type == "mouseMoved" ? "none" : "left", buttons = type == "mouseReleased" ? 0 : 1, clickCount = 1 });
+    }
+    static async Task Drag(EditorForm editor, string tool, Point a, Point b)
+    {
+        await Click(editor, $"button[aria-label='{tool}']");
+        await Pointer(editor, a.X, a.Y, "mousePressed");
+        if (a != b) await Pointer(editor, b.X, b.Y, "mouseMoved");
+        await Pointer(editor, b.X, b.Y, "mouseReleased");
+    }
+    static async Task Screenshot(EditorForm editor, string name)
+    {
+        using var stream = File.Create($"artifacts/self-test/{name}.png");
+        await editor.ScreenshotAsync(stream);
+    }
+    static async Task RunAsync()
+    {
+        using var desktop = ScreenCapture.Desktop();
+        Check(desktop.Width == SystemInformation.VirtualScreen.Width, "Desktop capture uses physical pixels");
+        using (var hotkeys = new HotkeyWindow())
+        {
+            Check(hotkeys.RegionRegistered && hotkeys.DesktopRegistered, "Both global hotkeys register");
+            bool received = false;
+            hotkeys.CaptureRequested += region => received |= region;
+            keybd_event(0x11, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x41, 0, 0, UIntPtr.Zero);
+            keybd_event(0x41, 0, 2, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); keybd_event(0x11, 0, 2, UIntPtr.Zero);
+            for (var i=0; i<300 && !received; i++) await Task.Delay(10);
+            Check(received, "Real keyboard input delivers Ctrl+Alt+A through WM_HOTKEY");
+        }
+        using (var selector = new RegionSelector(desktop, SystemInformation.VirtualScreen))
+        {
+            using var timer = new System.Windows.Forms.Timer { Interval = 100 };
+            timer.Tick += (_, _) => { timer.Stop(); Mouse(selector,"OnMouseDown",new(220,180)); Mouse(selector,"OnMouseMove",new(20,30)); Mouse(selector,"OnMouseUp",new(20,30)); };
+            timer.Start();
+            Check(selector.ShowDialog() == DialogResult.OK, "Region selector accepts a reverse drag");
+            Check(selector.Selection == new Rectangle(20,30,200,150), "Region coordinates remain physical pixels");
+        }
+        using var sampleStream = typeof(SmokeTests).Assembly.GetManifestResourceStream("Annotator.ParitySample.png")!;
+        using var sample = new Bitmap(sampleStream);
+        using var editor = new EditorForm();
+        await editor.Ready.WaitAsync(TimeSpan.FromSeconds(30));
+        Check(!editor.Visible, "Prewarmed editor has no visible window");
+        var origin = new Point(60, 160);
+        await editor.ShowImageAsync(sample, origin);
+        results.Add($"editor_open_warm_ms={editor.OpenLatencyMs} dpi={editor.DeviceDpi}");
+        Check(editor.OpenLatencyMs < 1000, "Prewarmed capture-to-visible-editor is under 1 second");
+        Check(editor.ImageOrigin == origin, "Image position equals selection origin in physical pixels");
+        Check(editor.DisplaySize == sample.Size, "Image display equals selected 900x550 physical pixels");
+        Check(await Eval(editor,"document.querySelectorAll('.toolbar .group')[0].querySelectorAll('button').length === 6"), "Toolbar has all six original icon tools");
+        Check(await Eval(editor,"window.annotator.state().width === 12 && window.annotator.state().pen === '--error'"), "Default ink and weight match PocketShell");
+        await Drag(editor,"Arrow",new(80,280),new(260,210));
+        await Drag(editor,"Rectangle",new(300,160),new(650,330));
+        await Drag(editor,"Draw",new(100,400),new(100,400));
+        await Drag(editor,"Text",new(357,200),new(357,200));
+        await editor.DevTools("Input.insertText",new { text="Look here\nMultiline caption" });
+        Check(await Eval(editor,"getComputedStyle(document.querySelector('textarea')).fontSize === '36px'"), "Caption uses Alexey's 36px font exception");
+        Check(await Eval(editor,"getComputedStyle(document.querySelector('textarea')).fontWeight === '600'"), "Caption font weight is 600");
+        await Screenshot(editor,"editing");
+        await Key(editor,"Enter","Enter",13,2);
+        await Click(editor,"button[aria-label='Arrow']");
+        Check((await State(editor)).GetProperty("items").GetArrayLength()==4, "Pointer and keyboard input commits the four reference annotations");
+        await Screenshot(editor,"editor");
+        var png = JsonSerializer.Deserialize<string>(await editor.Script("document.querySelector('canvas').toDataURL('image/png')"))!;
+        File.WriteAllBytes("artifacts/self-test/annotated.png",Convert.FromBase64String(png.Split(',')[1]));
+        await editor.Script("window.annotator.export('copy')");
+        for(int i=0;i<100 && !Clipboard.ContainsImage();i++) await Task.Delay(10);
+        using var pasted=Clipboard.GetImage();
+        Check(pasted?.Size==sample.Size,"Copy exports the original PNG dimensions to the Windows clipboard");
+        await Drag(editor,"Text",new(360,210),new(360,210));
+        Check(await Eval(editor,"document.querySelector('textarea').value.startsWith('Look here')"),"Click existing caption reopens it");
+        await editor.DevTools("Input.insertText",new {text="Edited"});
+        await Key(editor,"Escape","Escape",27);
+        await Key(editor,"z","KeyZ",90,2);
+        Check(await Eval(editor,"window.annotator.state().items[3].text.startsWith('Look here')"),"Ctrl+Z restores text edit");
+        await Click(editor,"button[title='Clear']");
+        Check((await State(editor)).GetProperty("items").GetArrayLength()==0,"Clear empties the drawing");
+        await Key(editor,"z","KeyZ",90,2);
+        Check((await State(editor)).GetProperty("items").GetArrayLength()==4,"Undo restores Clear");
+        await Key(editor,"Escape","Escape",27);
+        Check(await Eval(editor,"!!document.querySelector('.actions.confirm')"),"Escape arms the discard guard");
+        await Screenshot(editor,"guard");
+        await Key(editor,"Escape","Escape",27);
+        Check(await Eval(editor,"!document.querySelector('.actions.confirm')"),"Second Escape keeps editing");
+        editor.Close(); await Task.Delay(100);
+        Check(!editor.IsDisposed && await Eval(editor,"!!document.querySelector('.actions.confirm')"),"Window close routes through the discard guard");
+        editor.Close(); await Task.Delay(100);
+        Check(!editor.IsDisposed,"Repeated window close never discards work");
+        editor.CloseForTest();
+        var previous = Autostart.Current;
         try
         {
-            using var desktop = ScreenCapture.Desktop();
-            Check(desktop.Width == SystemInformation.VirtualScreen.Width && desktop.Height > 0, "GDI desktop capture at physical dimensions");
-            using (var hotkeys = new HotkeyWindow())
-            {
-                Check(hotkeys.RegionRegistered && hotkeys.DesktopRegistered, "Both global hotkeys register on Windows");
-                bool received = false;
-                hotkeys.CaptureRequested += region => received |= region;
-                keybd_event(0x11, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x41, 0, 0, UIntPtr.Zero);
-                keybd_event(0x41, 0, 2, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); keybd_event(0x11, 0, 2, UIntPtr.Zero);
-                var timeout = DateTime.UtcNow.AddSeconds(3);
-                while (!received && DateTime.UtcNow < timeout) { Application.DoEvents(); Thread.Sleep(10); }
-                Check(received, "Ctrl+Alt+A reaches WM_HOTKEY through Windows keyboard input");
-            }
-            using (var selector = new RegionSelector(desktop, SystemInformation.VirtualScreen))
-            {
-                using var selectTimer = new System.Windows.Forms.Timer { Interval = 100 };
-                selectTimer.Tick += (_, _) => {
-                    selectTimer.Stop();
-                    Mouse(selector, "OnMouseDown", new Point(220, 180));
-                    Mouse(selector, "OnMouseMove", new Point(20, 30));
-                    Mouse(selector, "OnMouseUp", new Point(20, 30));
-                };
-                selectTimer.Start();
-                Check(selector.ShowDialog() == DialogResult.OK, "Region drag accepts selection and closes overlay");
-                Check(selector.Selection == new Rectangle(20, 30, 200, 150), "Reverse region drag maps to source pixels");
-                using var cropped = desktop.Clone(selector.Selection, desktop.PixelFormat);
-                Check(cropped.Size == new Size(200, 150), "Region capture keeps selected resolution");
-            }
-            // Same backdrop and marks as the headless PocketShell harness
-            // (~/tmp/annotator-parity-harness/shot.mjs): 900x550, arrow,
-            // rectangle, pen dot, two-line caption at (357,200).
-            var backdrop = new Bitmap(900, 550);
-            using (var g = Graphics.FromImage(backdrop))
-            {
-                g.Clear(Color.FromArgb(242, 245, 250));
-                using var font = new Font("Segoe UI", 24);
-                g.DrawString("Screenshot → annotate → copy / save", font, Brushes.Black, 30, 30);
-                g.FillRectangle(Brushes.White, 50, 150, 780, 300);
-            }
-            Check(EditorForm.LastOpenLatencyMs == null, "No latency recorded before first open");
-            EditorForm.MarkOpenStart();
-            using var editor = new EditorForm(backdrop, new Point(60, 160));
-            Check(editor.Canvas.Tool == Tool.Pen, "Default tool is the pen, like the reference");
-            Check(editor.Canvas.Weight == 12, "Default weight is 12, like the reference");
-            Check(editor.Canvas.Ink.ToArgb() == Painter.Hex("#ef4444").ToArgb(), "Default ink is --error #ef4444");
-            editor.Show(); Application.DoEvents();
-            var coldMs = EditorForm.LastOpenLatencyMs;
-            Check(coldMs.HasValue, "First editor open reports latency");
-            results.Add($"editor_open_cold_ms={coldMs}");
-            var canvas = editor.Canvas;
-            Point At(float x, float y) => new((int)x, (int)y);
-            canvas.Tool = Tool.Arrow; canvas.Weight = 12;
-            Mouse(canvas, "OnMouseDown", At(80, 280)); Mouse(canvas, "OnMouseMove", At(260, 210)); Mouse(canvas, "OnMouseUp", At(260, 210));
-            Check(canvas.Document.Items.Count == 1, "Mouse gesture commits arrow despite capture release");
-            canvas.Tool = Tool.Rectangle;
-            Mouse(canvas, "OnMouseDown", At(300, 160)); Mouse(canvas, "OnMouseUp", At(650, 330));
-            canvas.Tool = Tool.Pen;
-            Mouse(canvas, "OnMouseDown", At(100, 400)); Mouse(canvas, "OnMouseUp", At(100, 400));
-            canvas.Tool = Tool.Text;
-            Mouse(canvas, "OnMouseDown", At(357, 200));
-            var caption = canvas.Controls.OfType<TextBox>().Single();
-            caption.Text = "Look here\nMultiline caption";
-            using var output = canvas.Export();
-            Check(!canvas.HasCaption && canvas.Document.Items.Count == 4, "Export flushes pending multiline caption");
-            Check(canvas.Document.Items[^1].Text.Contains('\n'), "Caption preserves newlines");
-            Check(output.GetPixel(100, 400).ToArgb() != backdrop.GetPixel(100, 400).ToArgb(), "Single pen click renders a visible dot");
-            Check(output.Width == 900 && output.Height == 550, "Export preserves source resolution");
-            Check(output.GetPixel(300, 200).ToArgb() != backdrop.GetPixel(300, 200).ToArgb(), "Annotation pixels present in exported image");
-            output.Save("artifacts/self-test/annotated.png", ImageFormat.Png);
-            Clipboard.SetImage(output); using var pasted = Clipboard.GetImage();
-            Check(pasted?.Width == output.Width, "Clipboard accepts flattened bitmap");
-            Mouse(canvas, "OnMouseDown", At(360, 210));
-            Check(canvas.Controls.OfType<TextBox>().Single().Text.StartsWith("Look here"), "Text tool reopens existing caption");
-            canvas.Controls.OfType<TextBox>().Single().Text = "Edited"; canvas.CommitCaption();
-            canvas.Document.Undo(); Check(canvas.Document.Items[^1].Text.StartsWith("Look here"), "Undo restores text edit through UI");
-            // 1:1 placement: the image sits at its physical size exactly over
-            // the selection, toolbar attached above without covering it.
-            Check(canvas.ViewScale == 1, "Selection-sized capture is shown unscaled");
-            Check(canvas.ImageSize == backdrop.Size, "Editor image size equals selected region size");
-            var origin = editor.ImageScreenOrigin();
-            results.Add($"placement_expected=60,160 placement_actual={origin.X},{origin.Y}");
-            Check(origin == new Point(60, 160), "Editor image position equals selection position");
-            // Warm open latency: hotkey to visible editor.
-            EditorForm.MarkOpenStart();
-            using (var warm = new EditorForm(new Bitmap(400, 300))) { warm.Show(); Application.DoEvents(); }
-            var warmMs = EditorForm.LastOpenLatencyMs;
-            Check(warmMs.HasValue, "Warm editor open reports latency");
-            results.Add($"editor_open_warm_ms={warmMs}");
-            Check(warmMs < 1000, "Hotkey to editor stays under 1 s");
-            using var screenshot = new Bitmap(editor.Width, editor.Height);
-            editor.DrawToBitmap(screenshot, new Rectangle(Point.Empty, screenshot.Size));
-            screenshot.Save("artifacts/self-test/editor.png", ImageFormat.Png);
-            editor.Close(); Check(!editor.IsDisposed, "Window close with unsaved work arms the guard instead of closing");
-            canvas.Document.MarkSaved(); editor.Close();
-            Check(editor.IsDisposed,"Saved editor closes");
-            var previousAutostart = Autostart.Current;
-            try
-            {
-                Autostart.Set(false);
-                using var settings = new SettingsForm();
-                settings.Show(); Application.DoEvents();
-                Check(!settings.StartWithWindows.Checked,"Settings shows Start with Windows off when Run entry is absent");
-                settings.StartWithWindows.Checked = true;
-                Check(Autostart.Current == $"\"{Environment.ProcessPath}\"","Checking Start with Windows writes HKCU Run entry with the EXE path");
-                results.Add("INFO autostart Run value: " + Autostart.Current);
-                settings.StartWithWindows.Checked = false;
-                Check(Autostart.Current == null,"Unchecking Start with Windows removes the HKCU Run entry");
-                settings.Close();
-            }
-            finally
-            {
-                if (previousAutostart == null) Autostart.Set(false);
-                else using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) key.SetValue(Autostart.ValueName, previousAutostart);
-            }
-            results.Add("Windows self-test passed: " + RuntimeInformation.ProcessArchitecture);
-            File.WriteAllLines("artifacts/self-test/results.txt", results);
-            return 0;
+            Autostart.Set(false);
+            using var settings=new SettingsForm(); settings.Show();
+            settings.StartWithWindows.Checked=true;
+            Check(Autostart.Current==Autostart.Command,"Settings writes the quoted EXE path to HKCU Run");
+            settings.StartWithWindows.Checked=false;
+            Check(Autostart.Current==null,"Settings removes the HKCU Run entry");
+            settings.Close();
         }
-        catch (Exception ex)
+        finally
         {
-            results.Add("FAIL " + ex);
-            File.WriteAllLines("artifacts/self-test/results.txt", results);
-            return 1;
+            if(previous==null) Autostart.Set(false);
+            else using(var key=Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) key.SetValue(Autostart.ValueName,previous);
         }
+        results.Add("Windows self-test passed: "+RuntimeInformation.ProcessArchitecture);
     }
 }

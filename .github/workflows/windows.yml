@@ -20,11 +20,32 @@ jobs:
             runner: windows-11-arm
             label: ARM64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Verify embedded UI matches its vendored source
+        shell: pwsh
+        run: |
+          npm --prefix ui ci
+          npm --prefix ui run build
+          git diff --exit-code -- src/Annotator/Web
+      - name: Ensure Windows WebView2 runtime
+        shell: pwsh
+        run: |
+          $runtime = @("${env:ProgramFiles(x86)}/Microsoft/EdgeWebView/Application", "$env:ProgramFiles/Microsoft/EdgeWebView/Application", "$env:LOCALAPPDATA/Microsoft/EdgeWebView/Application") | Where-Object { Test-Path $_ }
+          if (-not $runtime) {
+            Invoke-WebRequest https://go.microsoft.com/fwlink/p/?LinkId=2124703 -OutFile "$env:RUNNER_TEMP/WebView2Setup.exe"
+            $setup = Start-Process "$env:RUNNER_TEMP/WebView2Setup.exe" -ArgumentList '/silent','/install' -PassThru -Wait
+            if ($setup.ExitCode -ne 0) { throw "WebView2 install failed: $($setup.ExitCode)" }
+          }
       - name: Core regression tests
         run: dotnet run --project tests/Annotator.Tests -c Release
       - name: Build single-file portable EXE (runtime bundled)
@@ -64,14 +85,15 @@ jobs:
       - name: Native Windows integration tests (single-file EXE)
         shell: pwsh
         run: |
-          $process = Start-Process artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe -ArgumentList '--self-test' -PassThru -Wait
+          $process = Start-Process artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe -ArgumentList '--self-test' -PassThru
+          if (-not $process.WaitForExit(120000)) { Stop-Process -Id $process.Id -Force; throw 'Self-test timed out' }
           Get-Content artifacts/self-test/results.txt
           if ($process.ExitCode -ne 0) { throw "Windows integration tests failed: $($process.ExitCode)" }
       - name: Autostart check (Settings toggle writes and removes HKCU Run entry)
         shell: pwsh
         run: |
           $r = Get-Content artifacts/self-test/results.txt
-          foreach ($want in 'PASS Checking Start with Windows writes HKCU Run entry with the EXE path', 'PASS Unchecking Start with Windows removes the HKCU Run entry') {
+          foreach ($want in 'PASS Settings writes the quoted EXE path to HKCU Run', 'PASS Settings removes the HKCU Run entry') {
             if ($r -notcontains $want) { throw "Missing self-test result: $want" }
           }
           $r | Select-String 'autostart Run value'

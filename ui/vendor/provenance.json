@@ -1,0 +1,16 @@
+{
+  "source": "pocketshell-core",
+  "commit": "ea0a0df8b8b8fd5ff18449d9b8c40bc68100dd57",
+  "files": {
+    "packages/ui/src/app/components/DoodleCanvas.vue": "27e631736161c942446508f562f2fb9a045fbccdddc33a203d5c474588a7d856",
+    "packages/ui/src/app/useDoodleText.ts": "ddb5d1dd56d9ec827160286762c17d8c25496d00f3c1751551a36f694a07cdff",
+    "packages/ui/src/app/doodlePaint.ts": "53ed9fad1a0ef82b05632b646062d3651a3e834e307803737223c4cde7005a64",
+    "packages/ui/src/app/doodleModel.ts": "ccb2fcb45e2f14639bde9ec478164466e2d58217b48ed149ee3d3faaca8f70e2",
+    "packages/ui/src/components/AppIcon.vue": "53135c35875c5b710153d5ac0327cc4605b30854dcc651ca6f0f38e3d5ba7fc3",
+    "packages/ui/src/tokens.css": "f1eac960e906ec1de22070a5ba34bfe7d7f9d0ecebc0aef41c48d7b49f53752e",
+    "src/shared/doodleGeometry.ts": "37e4e08d785974d25b44436b8e8101097eadd44aebaa0500fbcf6806f11210a4",
+    "src/shared/shortcuts.ts": "490f5eb1e4f06f908753b4b44805eb5ebe1ab641d72e10c460f9336078fe1524",
+    "src/shared/shortcutTable.ts": "0142c6633ff6bd6e917e01b2c8d6edc0a8eb860a844861ec6cf5d1a2c03a1ebf",
+    "src/shared/composerAttachments.ts": "3e80b2d1a9f010988cc7bf5280036b22dc6cfd8c5f4e1a89305cda9fe1eb355f"
+  }
+}
