@@ -3,8 +3,9 @@
     <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms><EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <AssemblyName>WinScreenshotAnnotator</AssemblyName><Version>1.0.1</Version>
+    <AssemblyName>WinScreenshotAnnotator</AssemblyName><Version>1.0.2</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../../assets/icon.ico</ApplicationIcon>
     <!-- Portable release: one self-contained EXE per architecture (runtime bundled, English only, no trimming: WinForms is not trim-safe). -->
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -12,5 +13,6 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
+  <ItemGroup><EmbeddedResource Include="../../assets/icon.ico" LogicalName="Annotator.icon.ico" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../Annotator.Core/Annotator.Core.csproj" /></ItemGroup>
 </Project>

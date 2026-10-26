@@ -72,6 +72,8 @@ On Windows, run `WinScreenshotAnnotator.exe --self-test` from a writable working
 
 The self-test temporarily replaces the clipboard image. Core model and geometry tests also run on Linux.
 
+The app icon is drawn in `assets/icon.svg`; run `assets/make-icon.sh` to regenerate the multi-size `assets/icon.ico` (16–256 px) used for the EXE, tray, and editor windows.
+
 [Windows CI](https://github.com/alexeygrigorev/win-screenshot-annotator/actions/workflows/windows.yml) builds and runs tests on native AMD64 and ARM64 runners, builds a single-file self-contained EXE per architecture, runs the integration self-test against that EXE, and publishes the EXEs (plus ZIPs holding only the EXE and README) on `v*` tags with a `SHA256SUMS.txt`. See [self-contained deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [Win32 hotkey registration](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey).
 
 MIT licensed.

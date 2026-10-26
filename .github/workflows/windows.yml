@@ -36,6 +36,31 @@ jobs:
           if ($files.Count -ne 1 -or $files[0].Name -ne 'WinScreenshotAnnotator.exe') { throw "Expected exactly one published file (WinScreenshotAnnotator.exe), got $($files.Count)" }
           New-Item -ItemType Directory -Force artifacts/release | Out-Null
           Copy-Item artifacts/publish/WinScreenshotAnnotator.exe artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe
+      - name: EXE icon resource check
+        shell: pwsh
+        run: |
+          Add-Type -Namespace R -Name K -MemberDefinition @'
+          [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern IntPtr LoadLibraryEx(string f, IntPtr h, uint flags);
+          [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr FindResource(IntPtr m, IntPtr name, IntPtr type);
+          [DllImport("kernel32.dll")] public static extern IntPtr LoadResource(IntPtr m, IntPtr r);
+          [DllImport("kernel32.dll")] public static extern IntPtr LockResource(IntPtr r);
+          [DllImport("kernel32.dll")] public static extern uint SizeofResource(IntPtr m, IntPtr r);
+          public delegate bool EnumNames(IntPtr m, IntPtr type, IntPtr name, IntPtr p);
+          [DllImport("kernel32.dll")] public static extern bool EnumResourceNames(IntPtr m, IntPtr type, EnumNames cb, IntPtr p);
+          '@
+          $exe = (Resolve-Path artifacts/release/ScreenshotAnnotator-${{ matrix.label }}.exe).Path
+          $m = [R.K]::LoadLibraryEx($exe, [IntPtr]::Zero, 0x22) # LOAD_LIBRARY_AS_DATAFILE | AS_IMAGE_RESOURCE
+          if ($m -eq [IntPtr]::Zero) { throw "LoadLibraryEx failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
+          $script:groups = @()
+          [R.K]::EnumResourceNames($m, [IntPtr]14, { param($mod, $type, $name, $p) $script:groups += $name; $true }, [IntPtr]::Zero) | Out-Null # RT_GROUP_ICON
+          if ($script:groups.Count -lt 1) { throw 'EXE has no RT_GROUP_ICON resource' }
+          $r = [R.K]::FindResource($m, $script:groups[0], [IntPtr]14)
+          $ptr = [R.K]::LockResource([R.K]::LoadResource($m, $r))
+          $count = [Runtime.InteropServices.Marshal]::ReadInt16($ptr, 4)
+          $sizes = 0..($count - 1) | ForEach-Object { $w = [Runtime.InteropServices.Marshal]::ReadByte($ptr, 6 + 14 * $_); if ($w -eq 0) { 256 } else { $w } }
+          Write-Output "Icon group entries: $count, sizes: $($sizes -join ', ')"
+          foreach ($want in 16, 20, 24, 32, 48, 64, 256) { if ($sizes -notcontains $want) { throw "EXE icon lacks ${want}px" } }
+          Write-Output 'EXE icon resource check passed'
       - name: Native Windows integration tests (single-file EXE)
         shell: pwsh
         run: |
@@ -61,6 +86,7 @@ jobs:
             if ($app.MainWindowHandle -ne [IntPtr]::Zero) { throw "No-args launch opened a window: '$($app.MainWindowTitle)'" }
             if ($s -notmatch 'captures_started=0') { throw 'No-args launch started a capture' }
             if ($s -notmatch 'tray_visible=True') { throw 'Tray icon not visible' }
+            if ($s -notmatch 'tray_icon_custom=True') { throw 'Tray does not use the app icon' }
             if ($s -notmatch 'hotkey_region_registered=True') { throw 'Ctrl+Alt+A not registered by the app' }
             # Ctrl+Alt (0x0003) | MOD_NOREPEAT (0x4000) + 'A' must already be taken by the running app.
             if ([W.U]::RegisterHotKey([IntPtr]::Zero, 9001, 0x4003, 0x41)) { [W.U]::UnregisterHotKey([IntPtr]::Zero, 9001) | Out-Null; throw 'Ctrl+Alt+A is free: app did not register it' }

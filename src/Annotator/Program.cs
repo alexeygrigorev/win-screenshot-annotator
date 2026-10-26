@@ -50,6 +50,19 @@ internal sealed class HotkeyWindow : NativeWindow, IDisposable
     public void Dispose() { UnregisterHotKey(Handle, 1); UnregisterHotKey(Handle, 2); DestroyHandle(); }
 }
 
+/// App icon (assets/icon.ico, generated from assets/icon.svg), embedded so tray and windows match the EXE icon.
+internal static class AppIcon
+{
+    static Icon Load(Size size)
+    {
+        using var stream = typeof(AppIcon).Assembly.GetManifestResourceStream("Annotator.icon.ico")
+            ?? throw new InvalidOperationException("Embedded icon missing");
+        return new Icon(stream, size);
+    }
+    public static Icon Small { get; } = Load(SystemInformation.SmallIconSize);
+    public static Icon Large { get; } = Load(SystemInformation.IconSize);
+}
+
 internal sealed class CaptureContext : ApplicationContext
 {
     readonly HotkeyWindow hotkeys = new();
@@ -72,7 +85,7 @@ internal sealed class CaptureContext : ApplicationContext
             catch (Exception ex) { Error(ex); }
         });
         menu.Items.Add("Exit", null, (_,_) => ExitThread());
-        tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "Screenshot Annotator — Ctrl+Alt+A", ContextMenuStrip = menu, Visible = true };
+        tray = new NotifyIcon { Icon = AppIcon.Small, Text = "Screenshot Annotator — Ctrl+Alt+A", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_,_) => Capture(true);
         hotkeys.CaptureRequested += Capture;
         if (!hotkeys.RegionRegistered || !hotkeys.DesktopRegistered)
@@ -104,6 +117,7 @@ internal sealed class CaptureContext : ApplicationContext
                 $"hotkey_desktop_registered={hotkeys.DesktopRegistered}",
                 $"captures_started={captures}",
                 $"balloons_shown={balloons}",
+                $"tray_icon_custom={ReferenceEquals(tray.Icon, AppIcon.Small)}",
             });
         }
         catch (IOException) { }
@@ -118,7 +132,7 @@ internal sealed class CaptureContext : ApplicationContext
     }
     void Open(Bitmap image)
     {
-        var editor = new EditorForm(image);
+        var editor = new EditorForm(image) { Icon = AppIcon.Large };
         editors.Add(editor);
         editor.FormClosed += (_,_) => editors.Remove(editor);
         editor.Show(); editor.Activate();
